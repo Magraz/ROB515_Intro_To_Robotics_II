@@ -1,14 +1,24 @@
 import time
 import os
+import atexit
+import logging
+import math
+from logdecorator import log_on_start, log_on_end, log_on_error
 
 try:
-    from robot_hat import *
-    from robot_hat import reset_mcu
-    reset_mcu()
-    time.sleep(0.01)
+    from robot_hat import Pin, ADC, PWM, Servo, fileDB
+    from robot_hat import Grayscale_Module, Ultrasonic
+    from robot_hat.utils import reset_mcu, run_command
 except ImportError:
-    print("This computer does not appear to be a PiCar-X system (robot_hat is not present). Shadowing hardware calls with substitute functions")
-    from sim_robot_hat import *
+    from sim_robot_hat import Pin, ADC, PWM, Servo, fileDB
+    from sim_robot_hat import Grayscale_Module, Ultrasonic
+    from sim_robot_hat import reset_mcu, run_command    
+    print("Not on PiCar-X. Using simulated robot hat functions")
+
+#Set Logging configuration
+logging_format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=logging_format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.getLogger().setLevel(logging.DEBUG)
 
 # reset robot_hat
 reset_mcu()
@@ -97,6 +107,9 @@ class Picarx(object):
         # --------- ultrasonic init ---------
         tring, echo= ultrasonic_pins
         self.ultrasonic = Ultrasonic(Pin(tring), Pin(echo))
+
+        # Register stop function to be executed at interpreter termination
+        atexit.register(self.stop)
         
     def set_motor_speed(self, motor, speed):
         ''' set motor speed
@@ -113,8 +126,9 @@ class Picarx(object):
         elif speed < 0:
             direction = -1 * self.cali_dir_value[motor]
         speed = abs(speed)
-        if speed != 0:
-            speed = int(speed /2 ) + 50
+        # Linear scaling removed
+        # if speed != 0:
+        #     speed = int(speed /2 ) + 50
         speed = speed - self.cali_speed_value[motor]
         if direction < 0:
             self.motor_direction_pins[motor].high()
@@ -179,18 +193,43 @@ class Picarx(object):
         self.set_motor_speed(1, speed)
         self.set_motor_speed(2, speed)
 
+    def get_ackermann_scaling(self):
+        l = 0.1
+        w = 0.12
+
+        #Calculate inner and outer angles
+        inner_angle = math.atan((2*l*math.sin(self.dir_current_angle))/(2*l*math.cos(self.dir_current_angle) - w*math.sin(self.dir_current_angle)))
+        outer_angle = math.atan((2*l*math.sin(self.dir_current_angle))/(2*l*math.cos(self.dir_current_angle) + w*math.sin(self.dir_current_angle)))
+        
+        #If angles are zero set scaling to 1
+        if (inner_angle == 0) or (outer_angle == 0):
+            scaling = 1
+        else:
+            abs_outer_angle = abs(outer_angle)
+            abs_inner_angle = abs(inner_angle)
+
+            if abs(outer_angle) > abs(inner_angle):
+                scaling = abs_inner_angle/abs_outer_angle
+            else:
+                scaling = abs_outer_angle/abs_inner_angle
+        
+        return scaling
+
     def backward(self, speed):
         current_angle = self.dir_current_angle
         if current_angle != 0:
             abs_current_angle = abs(current_angle)
             if abs_current_angle > self.DIR_MAX:
                 abs_current_angle = self.DIR_MAX
-            power_scale = (100 - abs_current_angle) / 100.0 
+
+            # power_scale = (100 - abs_current_angle) / 100.0
+            ackermann_scaling = self.get_ackermann_scaling()
+
             if (current_angle / abs_current_angle) > 0:
                 self.set_motor_speed(1, -1*speed)
-                self.set_motor_speed(2, speed * power_scale)
+                self.set_motor_speed(2, speed * ackermann_scaling)
             else:
-                self.set_motor_speed(1, -1*speed * power_scale)
+                self.set_motor_speed(1, -1*speed * ackermann_scaling)
                 self.set_motor_speed(2, speed )
         else:
             self.set_motor_speed(1, -1*speed)
@@ -202,13 +241,15 @@ class Picarx(object):
             abs_current_angle = abs(current_angle)
             if abs_current_angle > self.DIR_MAX:
                 abs_current_angle = self.DIR_MAX
-            power_scale = (100 - abs_current_angle) / 100.0
+            # power_scale = (100 - abs_current_angle) / 100.0
             if (current_angle / abs_current_angle) > 0:
-                self.set_motor_speed(1, 1*speed * power_scale)
+                # self.set_motor_speed(1, 1*speed * power_scale)
+                self.set_motor_speed(1, 1*speed)
                 self.set_motor_speed(2, -speed) 
             else:
                 self.set_motor_speed(1, speed)
-                self.set_motor_speed(2, -1*speed * power_scale)
+                self.set_motor_speed(2, -1*speed)
+                # self.set_motor_speed(2, -1*speed * power_scale)
         else:
             self.set_motor_speed(1, speed)
             self.set_motor_speed(2, -1*speed)                  
