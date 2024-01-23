@@ -16,7 +16,7 @@ def forward_backward(picarx: Picarx, fw_angl: int, bk_angle: int):
 
 def parallel_parking(picarx: Picarx, direction: str):
     angle = 30
-    delay = 2
+    delay = 1.25
     if direction == 'left':
         picarx.set_dir_servo_angle(-angle)
         picarx.backward(SPEED)
@@ -38,7 +38,8 @@ def parallel_parking(picarx: Picarx, direction: str):
 
 def three_point_turn(picarx: Picarx, direction: str):
     angle = 30
-    delay = 2
+    delay = 1.5
+    return_delay = 2.5
 
     if direction == 'left':
         picarx.set_dir_servo_angle(-angle)
@@ -47,7 +48,7 @@ def three_point_turn(picarx: Picarx, direction: str):
 
         picarx.set_dir_servo_angle(angle)
         picarx.backward(SPEED)
-        sleep(delay)
+        sleep(return_delay)
         
     elif direction == 'right':
         picarx.set_dir_servo_angle(angle)
@@ -56,7 +57,7 @@ def three_point_turn(picarx: Picarx, direction: str):
 
         picarx.set_dir_servo_angle(-angle)
         picarx.backward(SPEED)
-        sleep(delay)
+        sleep(return_delay)
 
     picarx.set_dir_servo_angle(0)
     picarx.forward(SPEED)
