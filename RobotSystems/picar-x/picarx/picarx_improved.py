@@ -301,8 +301,42 @@ class Picarx(object):
         else:
             raise ValueError("grayscale reference must be a 1*3 list")
 
+class Sensing():
+    def __init__(self, 
+                grayscale_pins:list=['A0', 'A1', 'A2'],
+                ):
+        # --------- grayscale module init ---------
+        adc0, adc1, adc2 = [ADC(pin) for pin in grayscale_pins]
+        self.grayscale = Grayscale_Module(adc0, adc1, adc2, reference=None)
+
+        # Register stop function to be executed at interpreter termination
+        atexit.register(self.stop)
+        
+    def sense(self) -> list[int]:
+        return list.copy(self.grayscale.read())
+
+class Interpreter():
+    def __init__(self, 
+                sensitivity:int=0,
+                polarity:bool=0
+                ):
+        self.sensitivity = sensitivity
+        self.polarity = polarity
+        # Register stop function to be executed at interpreter termination
+        atexit.register(self.stop)
+        
+    def interpret(self, gs_readings: list[int]):
+        readings_avg = sum(gs_readings) / len(gs_readings)
+        norm_gs_readings = [x/readings_avg for x in gs_readings]
+        return norm_gs_readings
+
 if __name__ == "__main__":
     px = Picarx()
-    px.forward(50)
-    time.sleep(1)
+
+    sensor = Sensing()
+    logging.debug(f'\nRaw Grayscale Readings: {sensor.sense()}')
+    interpreter = Interpreter()
+    logging.debug(f'Average Of Readings: {sensor.sense()}')
+    logging.debug(f'Normalized Grayscale Readings: {interpreter.interpret(sensor.sense())}')
+
     px.stop()
