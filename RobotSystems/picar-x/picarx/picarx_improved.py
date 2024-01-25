@@ -321,22 +321,31 @@ class Interpreter():
                 polarity:bool=0
                 ):
         self.sensitivity = sensitivity
+        # 1 for white 0 for dark
         self.polarity = polarity
+
         # Register stop function to be executed at interpreter termination
         atexit.register(self.stop)
         
     def interpret(self, gs_readings: list[int]):
+        logging.debug(f'\nRaw Grayscale Readings: {gs_readings}')
+
         readings_avg = sum(gs_readings) / len(gs_readings)
         norm_gs_readings = [x/readings_avg for x in gs_readings]
+        # logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
+
+        edges = [abs(norm_gs_readings[0] - norm_gs_readings[1]), abs(norm_gs_readings[2] - norm_gs_readings[1])]
         return norm_gs_readings
+
+class Controller():
+    def __init__(self):
+        pass
 
 if __name__ == "__main__":
     px = Picarx()
 
-    sensor = Sensing()
-    logging.debug(f'\nRaw Grayscale Readings: {sensor.sense()}')
-    interpreter = Interpreter()
-    logging.debug(f'Average Of Readings: {sensor.sense()}')
-    logging.debug(f'Normalized Grayscale Readings: {interpreter.interpret(sensor.sense())}')
+    while True:
+        sensor = Sensing()
+        interpreter = Interpreter()
 
     px.stop()
