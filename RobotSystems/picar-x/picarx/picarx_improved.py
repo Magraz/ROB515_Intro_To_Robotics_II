@@ -8,7 +8,7 @@ from logdecorator import log_on_start, log_on_end, log_on_error
 try:
     from robot_hat import Pin, ADC, PWM, Servo, fileDB
     from robot_hat import Grayscale_Module, Ultrasonic
-    from robot_hat.utils import reset_mcu, run_command
+    from robot_hat.utils import reset_mcu, run_command, get_battery_voltage
 except ImportError:
     from sim_robot_hat import Pin, ADC, PWM, Servo, fileDB
     from sim_robot_hat import Grayscale_Module, Ultrasonic
@@ -308,44 +308,120 @@ class Sensing():
         # --------- grayscale module init ---------
         adc0, adc1, adc2 = [ADC(pin) for pin in grayscale_pins]
         self.grayscale = Grayscale_Module(adc0, adc1, adc2, reference=None)
-
-        # Register stop function to be executed at interpreter termination
-        atexit.register(self.stop)
         
     def sense(self) -> list[int]:
         return list.copy(self.grayscale.read())
 
 class Interpreter():
     def __init__(self, 
-                sensitivity:int=0,
+                sensitivity:int=0.0,
                 polarity:bool=0
                 ):
         self.sensitivity = sensitivity
         # 1 for white 0 for dark
         self.polarity = polarity
-
-        # Register stop function to be executed at interpreter termination
-        atexit.register(self.stop)
+        self.last_turn_factor = 0
         
     def interpret(self, gs_readings: list[int]):
+        #Offset correction
+        # gs_readings[0] -= 30
+        # gs_readings[2] += 100
         logging.debug(f'\nRaw Grayscale Readings: {gs_readings}')
 
-        readings_avg = sum(gs_readings) / len(gs_readings)
+        readings_avg = (sum(gs_readings) / len(gs_readings))
+        if(readings_avg == 0):
+            readings_avg = 1
         norm_gs_readings = [x/readings_avg for x in gs_readings]
         # logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
         edges = [abs(norm_gs_readings[0] - norm_gs_readings[1]), abs(norm_gs_readings[2] - norm_gs_readings[1])]
-        return norm_gs_readings
+        logging.debug(f'Edges: {edges}')
+
+        max_edge = 1.4
+        far_right = edges[0] / max_edge
+        far_left = edges[1]  / max_edge
+        turn_factor = 0
+
+        if(abs(edges[0] - edges[1]) > self.sensitivity):
+            if(far_right>far_left):
+                #logging.debug(f'TURNING LEFT')
+                turn_factor = -constrain(far_right - far_left - self.sensitivity, 0, 1)
+                # turn_factor = -constrain(far_right - self.sensitivity, 0, 1)
+                # turn_factor = -constrain(far_right, 0, 1)
+            elif(far_right<far_left):
+                #logging.debug(f'TURNING RIGHT')
+                turn_factor = constrain(far_left - far_right - self.sensitivity, 0, 1)
+                # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
+                # turn_factor = constrain(far_left, 0, 1)
+        
+        # if(turn_factor == 0):
+        #     turn_factor = self.last_turn_factor
+        # else:
+        #     self.last_turn_factor = turn_factor
+
+        logging.debug(f'TURN FACTOR {turn_factor}')
+        return turn_factor
 
 class Controller():
-    def __init__(self):
-        pass
+    def __init__(self, picarx: Picarx):
+        self.px = picarx
+
+    def follow_line(self, interpreted_sensor_val: int):
+        steer_deadzone = 0.1
+        steer = False
+
+        if(interpreted_sensor_val > 0):
+            if(interpreted_sensor_val>steer_deadzone):
+                steer = True
+        else:
+            if(interpreted_sensor_val<-steer_deadzone):
+                steer = True
+
+        # far = 0.9
+        # close = 0.40
+        
+        # low = 0.25
+        # mid = 0.5
+        # high = 1.0
+
+        # if(interpreted_sensor_val > 0):
+        #     if(interpreted_sensor_val>far):
+        #         interpreted_sensor_val = high
+        #     elif(close<interpreted_sensor_val and interpreted_sensor_val<far):
+        #         interpreted_sensor_val = mid
+        #     else:
+        #         interpreted_sensor_val = low
+        # else:
+        #     if(interpreted_sensor_val<-far):
+        #         interpreted_sensor_val = -high
+        #     elif(-close>interpreted_sensor_val and interpreted_sensor_val>-far):
+        #         interpreted_sensor_val = -mid
+        #     else:
+        #         interpreted_sensor_val = -low
+
+        angle_max = px.DIR_MAX
+        angle = interpreted_sensor_val*(angle_max)
+        angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
+
+        logging.debug(f'ANGLE: {angle}')
+        
+        self.px.forward(35)
+        if(steer):
+            self.px.set_dir_servo_angle(angle)
+        time.sleep(0.1)
 
 if __name__ == "__main__":
     px = Picarx()
+    sensor = Sensing()
+    interpreter = Interpreter()
+    controller = Controller(px)
 
     while True:
-        sensor = Sensing()
-        interpreter = Interpreter()
+        try:
+            controller.follow_line(interpreter.interpret(sensor.sense()))
+        except KeyboardInterrupt:
+            logging.debug(f'Exiting.. {get_battery_voltage()}')
+            px.stop()
+            break
 
     px.stop()
