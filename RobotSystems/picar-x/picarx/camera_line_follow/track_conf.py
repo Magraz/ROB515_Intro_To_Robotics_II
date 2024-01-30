@@ -16,7 +16,7 @@ th_iterations = 10
 white_min=3
 
 # max % of white in roi
-white_max=12
+white_max=20
 
 ## Driving settings
 

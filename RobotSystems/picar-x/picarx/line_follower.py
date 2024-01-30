@@ -16,7 +16,7 @@ class Sensing():
 
 class Interpreter():
     def __init__(self, 
-                sensitivity:int=0.0,
+                sensitivity:int=0.1,
                 polarity:bool=0
                 ):
         self.sensitivity = sensitivity
@@ -66,11 +66,14 @@ class Interpreter():
         readings_avg = (sum(gs_readings) / len(gs_readings))
         if(readings_avg == 0):
             readings_avg = 1
+
         norm_gs_readings = [x/readings_avg for x in gs_readings]
-        # logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
+        logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
         edges = [abs(norm_gs_readings[0] - norm_gs_readings[1]), abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
+
+
 
         far_right = edges[0] / max_edge
         far_left = edges[1]  / max_edge
@@ -88,10 +91,10 @@ class Interpreter():
                 # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
                 # turn_factor = constrain(far_left, 0, 1)
         
-        # if(turn_factor == 0):
-        #     turn_factor = self.last_turn_factor
-        # else:
-        #     self.last_turn_factor = turn_factor
+        if(turn_factor == 0):
+            turn_factor = self.last_turn_factor
+        else:
+            self.last_turn_factor = turn_factor
 
         logging.debug(f'TURN FACTOR: {turn_factor}')
         return turn_factor
@@ -100,7 +103,7 @@ class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
-    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.1, steer_delay: float=0.02):
+    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.2, steer_delay: float=0.1):
         steer = False
 
         if(interpreted_sensor_val > 0):
@@ -110,7 +113,8 @@ class Controller():
             if(interpreted_sensor_val<-steer_deadzone):
                 steer = True
 
-        angle = interpreted_sensor_val*(self.px.DIR_MAX)
+        angle_max = self.px.DIR_MAX + 5
+        angle = interpreted_sensor_val*(angle_max)
         angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
 
         logging.debug(f'ANGLE: {angle}')
@@ -119,6 +123,37 @@ class Controller():
         if(steer):
             self.px.set_dir_servo_angle(angle)
         sleep(steer_delay)
+
+        # slight = 0.25
+        # med = 0.50
+        # high = 0.75
+        # v_high = 1
+
+        # angle = 0
+        # if(interpreted_sensor_val>0):
+        #     if 0<interpreted_sensor_val and interpreted_sensor_val<=slight:
+        #         angle = px.DIR_MAX*slight
+        #     elif slight<interpreted_sensor_val and interpreted_sensor_val<=med:
+        #         angle = px.DIR_MAX*med
+        #     elif med<interpreted_sensor_val and interpreted_sensor_val<=high:
+        #         angle = px.DIR_MAX*high
+        #     elif high<interpreted_sensor_val and interpreted_sensor_val<=v_high:
+        #         angle = px.DIR_MAX
+        # else:
+        #     if interpreted_sensor_val>=-slight and 0>interpreted_sensor_val:
+        #         angle = -px.DIR_MAX*slight
+        #     elif interpreted_sensor_val>=-med and -slight>interpreted_sensor_val:
+        #         angle = -px.DIR_MAX*med
+        #     elif interpreted_sensor_val>=-high and -med>interpreted_sensor_val:
+        #         angle = -px.DIR_MAX*high
+        #     elif interpreted_sensor_val>=-v_high and -high>interpreted_sensor_val:
+        #         angle = -px.DIR_MAX
+
+        # logging.debug(f'ANGLE: {angle}')
+        
+        # self.px.forward(30)
+        # self.px.set_dir_servo_angle(angle)
+        # sleep(steer_delay)
 
 if __name__ == "__main__":
     px = Picarx()

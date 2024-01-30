@@ -8,7 +8,9 @@ class ROI:
 
 
     def init_roi(self, width, height):
-        vertices = [(0, height), (width / 4, 3 * height / 4),(3 * width / 4, 3 * height / 4), (width, height),]
+        print(width,height)
+        #vertices = [(0, height), (width / 4, 3 * height / 4),(3 * width / 4, 3 * height / 4), (width, height)]
+        vertices = [(0, height), (width / 5, 1 * height / 2),(4 * width / 5, 1 * height / 2), (width, height)]
         self.vertices = np.array([vertices], np.int32)
         
         blank = np.zeros((height, width, 3), np.uint8)
@@ -18,8 +20,8 @@ class ROI:
         self.area = cv.countNonZero(blank_cropped)
 
 
-
     def crop_roi(self, img):
+        #cv.imshow("Image", img)
         mask = np.zeros_like(img)
         match_mask_color = 255
         
