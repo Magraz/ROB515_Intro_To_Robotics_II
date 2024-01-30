@@ -21,7 +21,7 @@ class ROI:
 
 
     def crop_roi(self, img):
-        #cv.imshow("Image", img)
+        cv.imshow("Image", img)
         mask = np.zeros_like(img)
         match_mask_color = 255
         

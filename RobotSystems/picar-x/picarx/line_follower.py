@@ -16,7 +16,7 @@ class Sensing():
 
 class Interpreter():
     def __init__(self, 
-                sensitivity:int=0.1,
+                sensitivity:int=0.0,
                 polarity:bool=0
                 ):
         self.sensitivity = sensitivity
@@ -60,7 +60,7 @@ class Interpreter():
         logging.debug(f'TURN FACTOR {turn_factor}')
         return turn_factor
         
-    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1.4):
+    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1.1):
         logging.debug(f'\RAW GRAYSCALE:: {gs_readings}')
 
         readings_avg = (sum(gs_readings) / len(gs_readings))
@@ -70,13 +70,13 @@ class Interpreter():
         norm_gs_readings = [x/readings_avg for x in gs_readings]
         logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
-        edges = [abs(norm_gs_readings[0] - norm_gs_readings[1]), abs(norm_gs_readings[2] - norm_gs_readings[1])]
+        edges = [1*abs(norm_gs_readings[0] - norm_gs_readings[1]), 0.6*abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
 
 
 
-        far_right = edges[0] / max_edge
-        far_left = edges[1]  / max_edge
+        far_right = (edges[0] / max_edge)
+        far_left = (edges[1]  / max_edge)
         turn_factor = 0
 
         if(abs(edges[0] - edges[1]) > self.sensitivity):
@@ -103,7 +103,7 @@ class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
-    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.2, steer_delay: float=0.1):
+    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, steer_delay: float=0.05):
         steer = False
 
         if(interpreted_sensor_val > 0):

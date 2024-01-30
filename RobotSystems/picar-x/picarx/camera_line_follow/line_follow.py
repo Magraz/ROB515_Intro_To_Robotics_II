@@ -28,13 +28,13 @@ class Interpreter():
 	def __init__(self):
 		pass
 	def get_vector(self, frame, draw=False):
-		angle, shift = track.handle_pic(image=frame, draw=draw, inv_polarity=True, threshold=80)
+		angle, shift = track.handle_pic(image=frame, draw=draw, inv_polarity=True, threshold=90)
 		return angle, shift
 
 if __name__ == "__main__":
 	px = Picarx()
 	px.set_cam_pan_angle(2)
-	px.set_cam_tilt_angle(-10)
+	px.set_cam_tilt_angle(-15)
 	time.sleep(1)
 	sense = Sensing()
 	interpret = Interpreter()
@@ -44,10 +44,7 @@ if __name__ == "__main__":
 		# and occupied/unoccupied text
 		image = frame.array
 
-		# show the frame
 		angle, shift = interpret.get_vector(image, draw=True)
-
-		
 		
 		norm_ang_diff = 1
 		if((angle != 0) and (angle != None)):
@@ -59,7 +56,7 @@ if __name__ == "__main__":
 			max_shift = 90
 			norm_shift = shift/max_shift
 			px.set_dir_servo_angle(30*(0.9*norm_shift + 0.1*norm_ang_diff))
-			px.forward(35)
+			px.forward(50)
 		else:
 			px.stop()
 
@@ -78,7 +75,8 @@ if __name__ == "__main__":
 		# else:
 		# 	px.stop()
 
-		cv2.imshow("Image", image)
+		# show the frame
+		#cv2.imshow("Image", image)
 		key = cv2.waitKey(1) & 0xFF
 
 		# clear the stream in preparation for the next frame
