@@ -1,7 +1,9 @@
 from picarx_improved import Picarx, constrain
+from bus import Bus
 from robot_hat import ADC, Grayscale_Module
 from time import sleep
 import logging
+import concurrent.futures
 
 class Sensing():
     def __init__(self, 
@@ -13,52 +15,19 @@ class Sensing():
         
     def sense(self) -> list[int]:
         return list.copy(self.grayscale.read())
+    
+    def producer(self, bus: Bus, delay: int = 0):
+        while True:
+            bus.write(self.sense())
+            sleep(delay)
+
 
 class Interpreter():
     def __init__(self, 
                 sensitivity:int=0.0,
-                polarity:bool=0
                 ):
         self.sensitivity = sensitivity
-        # 1 for white 0 for dark
-        self.polarity = polarity
-
         self.last_turn_factor = 0
-    
-    def interpret_two_led(self, gs_readings: list[int]):
-
-        gs_readings = [gs_readings[0], gs_readings[1]]
-        logging.debug(f'\nRaw Grayscale Readings: {gs_readings}')
-
-        readings_avg = (sum(gs_readings) / len(gs_readings))
-        if(readings_avg == 0):
-            readings_avg = 1
-        norm_gs_readings = [x/readings_avg for x in gs_readings]
-        # logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
-
-        far_right = norm_gs_readings[0]
-        far_left = norm_gs_readings[1]
-        turn_factor = 0
-        
-        if(abs(far_right - far_left) > self.sensitivity):
-            if(far_right>far_left):
-                #logging.debug(f'TURNING LEFT')
-                turn_factor = -constrain(far_right - far_left - self.sensitivity, 0, 1)
-                # turn_factor = -constrain(far_right - self.sensitivity, 0, 1)
-                # turn_factor = -constrain(far_right, 0, 1)
-            elif(far_right<far_left):
-                #logging.debug(f'TURNING RIGHT')
-                turn_factor = constrain(far_left - far_right - self.sensitivity, 0, 1)
-                # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
-                # turn_factor = constrain(far_left, 0, 1)
-        
-        # if(turn_factor == 0):
-        #     turn_factor = self.last_turn_factor
-        # else:
-        #     self.last_turn_factor = turn_factor
-
-        logging.debug(f'TURN FACTOR {turn_factor}')
-        return turn_factor
         
     def interpret_three_led(self, gs_readings: list[int], max_edge: float=1.1):
         logging.debug(f'\RAW GRAYSCALE:: {gs_readings}')
@@ -72,8 +41,6 @@ class Interpreter():
 
         edges = [1*abs(norm_gs_readings[0] - norm_gs_readings[1]), 0.6*abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
-
-
 
         far_right = (edges[0] / max_edge)
         far_left = (edges[1]  / max_edge)
@@ -99,13 +66,19 @@ class Interpreter():
         logging.debug(f'TURN FACTOR: {turn_factor}')
         return turn_factor
 
+    def consumer_producer(self, sense_bus:Bus, interpret_bus:Bus, delay:int):
+        while True:
+            interpret_bus.write(self.interpret_three_led(gs_readings=sense_bus.read()))
+            sleep(delay)
+
 class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
     def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, steer_delay: float=0.05):
+        
+        # Check steer deadzone
         steer = False
-
         if(interpreted_sensor_val > 0):
             if(interpreted_sensor_val>steer_deadzone):
                 steer = True
@@ -113,47 +86,23 @@ class Controller():
             if(interpreted_sensor_val<-steer_deadzone):
                 steer = True
 
+        # Map turn factor to actual steer angle
         angle_max = self.px.DIR_MAX + 5
         angle = interpreted_sensor_val*(angle_max)
         angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
 
         logging.debug(f'ANGLE: {angle}')
         
+        #Motion control
         self.px.forward(35)
         if(steer):
             self.px.set_dir_servo_angle(angle)
         sleep(steer_delay)
 
-        # slight = 0.25
-        # med = 0.50
-        # high = 0.75
-        # v_high = 1
-
-        # angle = 0
-        # if(interpreted_sensor_val>0):
-        #     if 0<interpreted_sensor_val and interpreted_sensor_val<=slight:
-        #         angle = px.DIR_MAX*slight
-        #     elif slight<interpreted_sensor_val and interpreted_sensor_val<=med:
-        #         angle = px.DIR_MAX*med
-        #     elif med<interpreted_sensor_val and interpreted_sensor_val<=high:
-        #         angle = px.DIR_MAX*high
-        #     elif high<interpreted_sensor_val and interpreted_sensor_val<=v_high:
-        #         angle = px.DIR_MAX
-        # else:
-        #     if interpreted_sensor_val>=-slight and 0>interpreted_sensor_val:
-        #         angle = -px.DIR_MAX*slight
-        #     elif interpreted_sensor_val>=-med and -slight>interpreted_sensor_val:
-        #         angle = -px.DIR_MAX*med
-        #     elif interpreted_sensor_val>=-high and -med>interpreted_sensor_val:
-        #         angle = -px.DIR_MAX*high
-        #     elif interpreted_sensor_val>=-v_high and -high>interpreted_sensor_val:
-        #         angle = -px.DIR_MAX
-
-        # logging.debug(f'ANGLE: {angle}')
-        
-        # self.px.forward(30)
-        # self.px.set_dir_servo_angle(angle)
-        # sleep(steer_delay)
+    def consumer(self, interpret_bus:Bus, delay:int):
+        while True:
+            self.follow_line(interpret_bus.read())
+            sleep(delay)
 
 if __name__ == "__main__":
     px = Picarx()
@@ -164,9 +113,8 @@ if __name__ == "__main__":
     while True:
         try:
             controller.follow_line(interpreter.interpret_three_led(sensor.sense()))
-            # controller.follow_line(interpreter.interpret_two_led(sensor.sense()))
         except KeyboardInterrupt:
-            logging.debug(f'Exiting..')
+            logging.debug('Exiting..')
             px.stop()
             break
 
