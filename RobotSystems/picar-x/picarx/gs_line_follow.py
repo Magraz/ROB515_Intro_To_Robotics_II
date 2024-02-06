@@ -3,7 +3,13 @@ from bus import Bus
 from robot_hat import ADC, Grayscale_Module
 from time import sleep
 import logging
-import concurrent.futures
+import numpy as np
+import math
+
+#Set Logging configuration
+logging_format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=logging_format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.getLogger().setLevel(logging.DEBUG)
 
 class Sensing():
     def __init__(self, 
@@ -29,7 +35,7 @@ class Interpreter():
         self.sensitivity = sensitivity
         self.last_turn_factor = 0
         
-    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1.1):
+    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1):
         logging.debug(f'\RAW GRAYSCALE:: {gs_readings}')
 
         readings_avg = (sum(gs_readings) / len(gs_readings))
@@ -39,7 +45,7 @@ class Interpreter():
         norm_gs_readings = [x/readings_avg for x in gs_readings]
         logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
-        edges = [1*abs(norm_gs_readings[0] - norm_gs_readings[1]), 0.6*abs(norm_gs_readings[2] - norm_gs_readings[1])]
+        edges = [abs(1*norm_gs_readings[0] - norm_gs_readings[1]), 1.2*abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
 
         far_right = (edges[0] / max_edge)
@@ -48,7 +54,6 @@ class Interpreter():
 
         if(abs(edges[0] - edges[1]) > self.sensitivity):
             if(far_right>far_left):
-                #logging.debug(f'TURNING LEFT')
                 turn_factor = -constrain(far_right - far_left - self.sensitivity, 0, 1)
                 # turn_factor = -constrain(far_right - self.sensitivity, 0, 1)
                 # turn_factor = -constrain(far_right, 0, 1)
@@ -58,12 +63,13 @@ class Interpreter():
                 # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
                 # turn_factor = constrain(far_left, 0, 1)
         
-        if(turn_factor == 0):
+        logging.debug(f'TURN FACTOR: {turn_factor}')
+
+        if math.isclose(turn_factor, 0, abs_tol=0.2):
             turn_factor = self.last_turn_factor
         else:
             self.last_turn_factor = turn_factor
 
-        logging.debug(f'TURN FACTOR: {turn_factor}')
         return turn_factor
 
     def consumer_producer(self, sense_bus:Bus, interpret_bus:Bus, delay:int):
@@ -75,7 +81,7 @@ class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
-    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, steer_delay: float=0.05):
+    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, steer_delay: float=0.02):
         
         # Check steer deadzone
         steer = False
@@ -87,7 +93,7 @@ class Controller():
                 steer = True
 
         # Map turn factor to actual steer angle
-        angle_max = self.px.DIR_MAX + 5
+        angle_max = self.px.DIR_MAX
         angle = interpreted_sensor_val*(angle_max)
         angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
 

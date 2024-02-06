@@ -3,7 +3,7 @@ from readerwriterlock import rwlock
 class Bus:
     def __init__(self):
         self.lock = rwlock.RWLockWriteD()
-        self.msg = ""
+        self.msg = 0
         pass
 
     def write(self, msg):

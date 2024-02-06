@@ -3,7 +3,14 @@ from bus import Bus
 from robot_hat import ADC, Grayscale_Module
 from time import sleep
 import logging
+from math import isclose
 from concurrent.futures import ThreadPoolExecutor
+import sys
+
+#Set Logging configuration
+logging_format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=logging_format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.getLogger().setLevel(logging.INFO)
 
 class Sensing():
     def __init__(self, 
@@ -29,7 +36,7 @@ class Interpreter():
         self.sensitivity = sensitivity
         self.last_turn_factor = 0
         
-    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1.1):
+    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1):
         logging.debug(f'\RAW GRAYSCALE:: {gs_readings}')
 
         readings_avg = (sum(gs_readings) / len(gs_readings))
@@ -39,7 +46,7 @@ class Interpreter():
         norm_gs_readings = [x/readings_avg for x in gs_readings]
         logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
-        edges = [1*abs(norm_gs_readings[0] - norm_gs_readings[1]), 0.6*abs(norm_gs_readings[2] - norm_gs_readings[1])]
+        edges = [1*abs(norm_gs_readings[0] - norm_gs_readings[1]), 1.2*abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
 
         far_right = (edges[0] / max_edge)
@@ -58,7 +65,7 @@ class Interpreter():
                 # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
                 # turn_factor = constrain(far_left, 0, 1)
         
-        if(turn_factor == 0):
+        if(isclose(turn_factor, 0, abs_tol=0.2)):
             turn_factor = self.last_turn_factor
         else:
             self.last_turn_factor = turn_factor
@@ -68,7 +75,9 @@ class Interpreter():
 
     def consumer_producer(self, sense_bus:Bus, interpret_bus:Bus, delay:int):
         while True:
-            interpret_bus.write(self.interpret_three_led(gs_readings=sense_bus.read()))
+            data = sense_bus.read()
+            if(data is not None):
+                interpret_bus.write(self.interpret_three_led(gs_readings=data))
             sleep(delay)
 
 class Controller():
@@ -87,11 +96,11 @@ class Controller():
                 steer = True
 
         # Map turn factor to actual steer angle
-        angle_max = self.px.DIR_MAX + 5
+        angle_max = self.px.DIR_MAX
         angle = interpreted_sensor_val*(angle_max)
         angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
 
-        logging.debug(f'ANGLE: {angle}')
+        #logging.debug(f'ANGLE: {angle}')
         
         #Motion control
         self.px.forward(35)
@@ -100,7 +109,9 @@ class Controller():
 
     def consumer(self, interpret_bus:Bus, delay:int):
         while True:
-            self.follow_line(interpret_bus.read())
+            data = interpret_bus.read()
+            if(data is not None):
+                self.follow_line(interpreted_sensor_val=data)
             sleep(delay)
 
 if __name__ == "__main__":
@@ -111,20 +122,27 @@ if __name__ == "__main__":
     controller = Controller(px)
 
     sensor_delay = 0.01
-    interpreter_delay = 0.01
-    controller_delay = 0.05
+    interpreter_delay = 0.02
+    controller_delay = 0.03
 
     sensor_bus = Bus()
     interpreter_bus = Bus()
-    controller_bus = Bus()
 
-    with ThreadPoolExecutor(max_workers=3) as exec:
+    with ThreadPoolExecutor(max_workers=6) as exec:
         eSensor = exec.submit(sensor.producer, sensor_bus, sensor_delay)
         eInterpreter = exec.submit(interpreter.consumer_producer, sensor_bus, interpreter_bus, interpreter_delay)
-        eController = exec.submit(controller.consumer, controller_bus, controller_delay)
+        eController = exec.submit(controller.consumer, interpreter_bus, controller_delay)
+    
+    try:
+        eSensor.daemon = True
+        eInterpreter.daemon = True
+        eController.daemon = True
 
         eSensor.result()
         eInterpreter.result()
         eController.result()
+        px.stop()
 
-    px.stop()
+    except KeyboardInterrupt:
+        print('Exited...')
+        px.stop()

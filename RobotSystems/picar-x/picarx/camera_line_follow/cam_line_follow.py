@@ -5,11 +5,10 @@ import track_cv as track
 import cv2
 import os
 import sys
-import time
+from time import sleep
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 
 from picarx_improved import Picarx
-
 
 class Sensing():
 	def __init__(self):
@@ -19,7 +18,7 @@ class Sensing():
 		self.camera.framerate = 32
 		self.rawCapture = PiRGBArray(self.camera, size=(640, 480))
 		# allow the camera to warmup
-		time.sleep(0.1)
+		sleep(0.1)
 		
 	def get_stream(self):
 		return self.camera.capture_continuous(self.rawCapture, format="bgr", use_video_port=True)
@@ -27,15 +26,18 @@ class Sensing():
 class Interpreter():
 	def __init__(self):
 		pass
+
 	def get_vector(self, frame, draw=False):
 		angle, shift = track.handle_pic(image=frame, draw=draw, inv_polarity=True, threshold=90)
 		return angle, shift
 
 if __name__ == "__main__":
 	px = Picarx()
+
 	px.set_cam_pan_angle(2)
 	px.set_cam_tilt_angle(-15)
-	time.sleep(1)
+	sleep(1)
+
 	sense = Sensing()
 	interpret = Interpreter()
 	# capture frames from the camera
@@ -56,25 +58,10 @@ if __name__ == "__main__":
 			max_shift = 90
 			norm_shift = shift/max_shift
 			px.set_dir_servo_angle(30*(0.9*norm_shift + 0.1*norm_ang_diff))
-			px.forward(50)
+			px.forward(35)
 		else:
 			px.stop()
-
-		# if((angle != 0) and (angle != None)):
-		# 	# max_angle = 90
-		# 	max_shift = 90
-			
-		# 	# angle_diff = angle-max_angle
-		# 	# norm_ang_diff = angle_diff/max_angle
-		# 	norm_shift = shift/max_shift
-			
-		# 	# px.set_dir_servo_angle(40 * -norm_ang_diff + 30*norm_shift)
-		# 	px.set_dir_servo_angle(30*norm_shift)
-		# 	px.forward(40)
-
-		# else:
-		# 	px.stop()
-
+		
 		# show the frame
 		#cv2.imshow("Image", image)
 		key = cv2.waitKey(1) & 0xFF

@@ -18,7 +18,7 @@ except ImportError:
 #Set Logging configuration
 logging_format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=logging_format, level=logging.INFO, datefmt="%H:%M:%S")
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.INFO)
 
 # reset robot_hat
 reset_mcu()
