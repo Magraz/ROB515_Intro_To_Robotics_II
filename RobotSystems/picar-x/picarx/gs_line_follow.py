@@ -3,7 +3,6 @@ from bus import Bus
 from robot_hat import ADC, Grayscale_Module
 from time import sleep
 import logging
-import numpy as np
 import math
 
 #Set Logging configuration
@@ -55,13 +54,8 @@ class Interpreter():
         if(abs(edges[0] - edges[1]) > self.sensitivity):
             if(far_right>far_left):
                 turn_factor = -constrain(far_right - far_left - self.sensitivity, 0, 1)
-                # turn_factor = -constrain(far_right - self.sensitivity, 0, 1)
-                # turn_factor = -constrain(far_right, 0, 1)
             elif(far_right<far_left):
-                #logging.debug(f'TURNING RIGHT')
                 turn_factor = constrain(far_left - far_right - self.sensitivity, 0, 1)
-                # turn_factor = constrain(far_left - self.sensitivity, 0, 1)
-                # turn_factor = constrain(far_left, 0, 1)
         
         logging.debug(f'TURN FACTOR: {turn_factor}')
 
@@ -76,12 +70,11 @@ class Interpreter():
         while True:
             interpret_bus.write(self.interpret_three_led(gs_readings=sense_bus.read()))
             sleep(delay)
-
 class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
-    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, steer_delay: float=0.02):
+    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, detecting_obstacles: bool=False):
         
         # Check steer deadzone
         steer = False
@@ -100,10 +93,10 @@ class Controller():
         logging.debug(f'ANGLE: {angle}')
         
         #Motion control
-        self.px.forward(35)
+        if not detecting_obstacles:
+            self.px.forward(35)
         if(steer):
             self.px.set_dir_servo_angle(angle)
-        sleep(steer_delay)
 
     def consumer(self, interpret_bus:Bus, delay:int):
         while True:
