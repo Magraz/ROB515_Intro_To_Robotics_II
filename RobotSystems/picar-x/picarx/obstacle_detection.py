@@ -11,17 +11,18 @@ class Sensing():
         self.px = picarx
         
     def get_distance(self) -> list[int]:
-        return self.px.ultrasonic.get_distance()
+        return self.px.get_distance()
 
 
 class Interpreter():
-    def __init__():
+    def __init__(self):
         pass
         
     def interpret_distance(self, distance: float):
+        print(distance)
         logging.debug(f'RAW ULTRASONIC: {distance}')
 
-        if(distance < 5):
+        if(distance < 10):
             return True
         else:
             return False

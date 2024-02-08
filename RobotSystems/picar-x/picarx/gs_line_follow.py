@@ -34,17 +34,24 @@ class Interpreter():
         self.sensitivity = sensitivity
         self.last_turn_factor = 0
         
-    def interpret_three_led(self, gs_readings: list[int], max_edge: float=1):
+    def interpret_three_led(self, gs_readings: list[int]):
+
+        max_edge = 1
+
         logging.debug(f'\RAW GRAYSCALE:: {gs_readings}')
 
+        if(type(gs_readings) is not list):
+            gs_readings = [1,1,1]
+
         readings_avg = (sum(gs_readings) / len(gs_readings))
+
         if(readings_avg == 0):
             readings_avg = 1
 
         norm_gs_readings = [x/readings_avg for x in gs_readings]
         logging.debug(f'Normalized Grayscale Readings: {norm_gs_readings}')
 
-        edges = [abs(1*norm_gs_readings[0] - norm_gs_readings[1]), 1.2*abs(norm_gs_readings[2] - norm_gs_readings[1])]
+        edges = [abs(1*norm_gs_readings[0] - norm_gs_readings[1]), 1*abs(norm_gs_readings[2] - norm_gs_readings[1])]
         logging.debug(f'EDGES: {edges}')
 
         far_right = (edges[0] / max_edge)
@@ -70,12 +77,15 @@ class Interpreter():
         while True:
             interpret_bus.write(self.interpret_three_led(gs_readings=sense_bus.read()))
             sleep(delay)
+
 class Controller():
     def __init__(self, picarx: Picarx):
         self.px = picarx
 
-    def follow_line(self, interpreted_sensor_val: int, steer_deadzone: float=0.05, detecting_obstacles: bool=False):
-        
+    def follow_line(self, interpreted_sensor_val: int):
+        steer_deadzone = 0.05
+        detecting_obstacles = True
+
         # Check steer deadzone
         steer = False
         if(interpreted_sensor_val > 0):
@@ -88,7 +98,7 @@ class Controller():
         # Map turn factor to actual steer angle
         angle_max = self.px.DIR_MAX
         angle = interpreted_sensor_val*(angle_max)
-        angle = constrain(angle, px.DIR_MIN, px.DIR_MAX)
+        angle = constrain(angle, self.px.DIR_MIN, self.px.DIR_MAX)
 
         logging.debug(f'ANGLE: {angle}')
         
@@ -97,6 +107,7 @@ class Controller():
             self.px.forward(35)
         if(steer):
             self.px.set_dir_servo_angle(angle)
+        sleep(0.1)
 
     def consumer(self, interpret_bus:Bus, delay:int):
         while True:

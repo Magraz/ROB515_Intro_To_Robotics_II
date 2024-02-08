@@ -304,6 +304,6 @@ class Picarx(object):
 if __name__ == "__main__":
     px = Picarx()
 
-    logging.debug(f'Voltage {get_battery_voltage()}')
+    logging.info(f'Voltage {get_battery_voltage()}')
 
     px.stop()
