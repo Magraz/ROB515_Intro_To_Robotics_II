@@ -1,0 +1,9 @@
+.vscode/*
+*.jpg
+*.pyc
+*.swp
+*.npz
+*.d6a
+*.iml
+*.xml
+build/*
