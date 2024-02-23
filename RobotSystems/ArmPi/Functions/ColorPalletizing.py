@@ -174,7 +174,7 @@ def move():
     while True:
         if __isRunning:
             if detect_color != 'None' and start_pick_up:  # 如果检测到方块没有移动一段时间后，开始夹取
-                set_rgb(detect_color)
+                #set_rgb(detect_color)
                 setBuzzer(0.1)
                 # 高度累加
                 z = z_r
@@ -253,7 +253,7 @@ def move():
                     detect_color = 'None'
                     get_roi = False
                     start_pick_up = False
-                    set_rgb(detect_color)
+                    #set_rgb(detect_color)
         else:
             if _stop:
                 _stop = False

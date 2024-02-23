@@ -26,8 +26,8 @@ range_rgb = {
     'white': (255, 255, 255),
 }
 
-__target_color = ('red')
-# 设置检测颜色
+__target_color = ('green')
+# Set detection color
 def setTargetColor(target_color):
     global __target_color
 
@@ -35,8 +35,8 @@ def setTargetColor(target_color):
     __target_color = target_color
     return (True, ())
 
-# 找出面积最大的轮廓
-# 参数为要比较的轮廓的列表
+# Find the contour with the largest area
+# The argument is a list of contours to compare
 def getAreaMaxContour(contours):
     contour_area_temp = 0
     contour_area_max = 0
@@ -51,7 +51,7 @@ def getAreaMaxContour(contours):
 
     return area_max_contour, contour_area_max  # 返回最大的轮廓
 
-# 夹持器夹取时闭合的角度
+# The angle at which the gripper closes when clamping
 servo1 = 500
 
 # 初始位置
@@ -173,65 +173,75 @@ def move():
     global center_list, count
     global start_pick_up, first_move
 
-    # 不同颜色木快放置坐标(x, y, z)
+    # Different color wood quick placement coordinates(x, y, z)
     coordinate = {
-        'red':   (-15 + 0.5, 12 - 0.5, 1.5),
-        'green': (-15 + 0.5, 6 - 0.5,  1.5),
-        'blue':  (-15 + 0.5, 0 - 0.5,  1.5),
+        'red':   (-15 + 0.5, 12 - 0.5, 3),
+        'green': (-15, 6,  3),
+        'blue':  (-15 + 0.5, 0 - 0.5,  3),
     }
     while True:
+        print(f'World X {world_x}, World Y {world_y}')
+        # result = ArmIK.setPitchRangeMoving((2.67, 22.11, 10), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
+        # if result == False:
+        #     unreachable = True
+        # time.sleep(1) 
         if __isRunning:
-            if first_move and start_pick_up: # 当首次检测到物体时               
+            if first_move and start_pick_up: # When an object is first detected               
                 action_finish = False
                 #set_rgb(detect_color)
                 setBuzzer(0.1)               
-                result = ArmIK.setPitchRangeMoving((world_X, world_Y - 2, 5), -90, -90, 0) # 不填运行时间参数，自适应运行时间
+                result = ArmIK.setPitchRangeMoving((world_X, world_Y - 10, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
                 if result == False:
+                    result = [0,0,1000]
                     unreachable = True
                 else:
                     unreachable = False
-                time.sleep(result[2]/1000) # 返回参数的第三项为时间
+                time.sleep(result[2]/1000) # The third item of the return parameter is the time
                 start_pick_up = False
                 first_move = False
                 action_finish = True
-            elif not first_move and not unreachable: # 不是第一次检测到物体
+            elif not first_move and not unreachable: # This is not the first time an object is detected
                 #set_rgb(detect_color)
-                if track: # 如果是跟踪阶段
-                    if not __isRunning: # 停止以及退出标志位检测
+                if track: # If it is the tracking stage
+                    if not __isRunning: # Stop and exit flag detection
                         continue
-                    ArmIK.setPitchRangeMoving((world_x, world_y - 2, 5), -90, -90, 0, 20)
+                    ArmIK.setPitchRangeMoving((world_x, world_y - 10, 5), -90, -90, 0)
                     time.sleep(0.02)                    
                     track = False
-                if start_pick_up: #如果物体没有移动一段时间，开始夹取
+                if start_pick_up: #If the object has not moved for a while, start gripping
                     action_finish = False
-                    if not __isRunning: # 停止以及退出标志位检测
+                    if not __isRunning: # Stop and exit flag detection
                         continue
-                    Board.setBusServoPulse(1, servo1 - 280, 500)  # 爪子张开
-                    # 计算夹持器需要旋转的角度
+                    Board.setBusServoPulse(1, servo1 - 280, 500)  # Claws spread
+                    # Calculate the angle by which the gripper needs to be rotated
                     servo2_angle = getAngle(world_X, world_Y, rotation_angle)
                     Board.setBusServoPulse(2, servo2_angle, 500)
                     time.sleep(0.8)
                     
                     if not __isRunning:
                         continue
-                    ArmIK.setPitchRangeMoving((world_X, world_Y, 2), -90, -90, 0, 1000)  # 降低高度
+                    
+                    ArmIK.setPitchRangeMoving((world_X, world_Y, 2), -90, -90, 0)  # lower the altitude
                     time.sleep(2)
                     
                     if not __isRunning:
                         continue
-                    Board.setBusServoPulse(1, servo1, 500)  # 夹持器闭合
+                    Board.setBusServoPulse(1, servo1+300, 500)  # Gripper closed
                     time.sleep(1)
                     
                     if not __isRunning:
                         continue
                     Board.setBusServoPulse(2, 500, 500)
-                    ArmIK.setPitchRangeMoving((world_X, world_Y, 12), -90, -90, 0, 1000)  # 机械臂抬起
+                    
+                    ArmIK.setPitchRangeMoving((world_X, world_Y, 12), -90, -90, 0)  # Robotic arm raised
                     time.sleep(1)
                     
                     if not __isRunning:
                         continue
-                    # 对不同颜色方块进行分类放置
+                    # Classify and place blocks of different colors
                     result = ArmIK.setPitchRangeMoving((coordinate[detect_color][0], coordinate[detect_color][1], 12), -90, -90, 0)   
+                    if result == False:
+                        result = [0,0,1000]
                     time.sleep(result[2]/1000)
                     
                     if not __isRunning:
@@ -317,7 +327,7 @@ def run(img):
      
     frame_resize = cv2.resize(img_copy, size, interpolation=cv2.INTER_NEAREST)
     frame_gb = cv2.GaussianBlur(frame_resize, (11, 11), 11)
-    #如果检测到某个区域有识别到的物体，则一直检测该区域直到没有为止
+    #If a recognized object is detected in a certain area, the area is detected until there is no recognized object.
     if get_roi and start_pick_up:
         get_roi = False
         frame_gb = getMaskROI(frame_gb, roi, size)    
@@ -331,29 +341,29 @@ def run(img):
             if i in __target_color:
                 detect_color = i
                 frame_mask = cv2.inRange(frame_lab, color_range[detect_color][0], color_range[detect_color][1])  # 对原图像和掩模进行位运算
-                opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # 开运算
-                closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # 闭运算
-                contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]  # 找出轮廓
-                areaMaxContour, area_max = getAreaMaxContour(contours)  # 找出最大轮廓
-        if area_max > 2500:  # 有找到最大面积
+                opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
+                closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
+                contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]  # find the outline
+                areaMaxContour, area_max = getAreaMaxContour(contours)  # Find the maximum contour
+        if area_max > 2500:  # Found the largest area
             rect = cv2.minAreaRect(areaMaxContour)
             box = np.int0(cv2.boxPoints(rect))
 
-            roi = getROI(box) #获取roi区域
+            roi = getROI(box) #Get roi area
             get_roi = True
 
-            img_centerx, img_centery = getCenter(rect, roi, size, square_length)  # 获取木块中心坐标
-            world_x, world_y = convertCoordinate(img_centerx, img_centery, size) #转换为现实世界坐标
+            img_centerx, img_centery = getCenter(rect, roi, size, square_length)  # Get the center coordinates of the wooden block
+            world_x, world_y = convertCoordinate(img_centerx, img_centery, size) #Convert to real world coordinates
             
             
             cv2.drawContours(img, [box], -1, range_rgb[detect_color], 2)
             cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, range_rgb[detect_color], 1) #绘制中心点
-            distance = math.sqrt(pow(world_x - last_x, 2) + pow(world_y - last_y, 2)) #对比上次坐标来判断是否移动
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, range_rgb[detect_color], 1) #draw center point
+            distance = math.sqrt(pow(world_x - last_x, 2) + pow(world_y - last_y, 2)) #Compare the last coordinates to determine whether to move
             last_x, last_y = world_x, world_y
             track = True
             #print(count,distance)
-            # 累计判断
+            # Cumulative judgment
             if action_finish:
                 if distance < 0.3:
                     center_list.extend((world_x, world_y))
@@ -378,7 +388,7 @@ def run(img):
 if __name__ == '__main__':
     init()
     start()
-    __target_color = ('red', )
+    __target_color = ('green', )
     my_camera = Camera.Camera()
     my_camera.camera_open()
     while True:
@@ -389,6 +399,8 @@ if __name__ == '__main__':
             cv2.imshow('Frame', Frame)
             key = cv2.waitKey(1)
             if key == 27:
+                # ArmIK.setPitchRangeMoving((-15, 6,  3), -90, -90, 0, 1000)
+                # Board.setBusServoPulse(1, servo1 - 280, 500)
                 break
     my_camera.camera_close()
     cv2.destroyAllWindows()
