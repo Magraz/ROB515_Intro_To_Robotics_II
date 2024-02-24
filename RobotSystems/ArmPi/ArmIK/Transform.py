@@ -43,8 +43,8 @@ def world2pixel(l, size):
 
     return l_
 
-# 获取检测物体的roi区域
-# 传入cv2.boxPoints(rect)返回的四个顶点的值，返回极值点
+# Get the roi area of ​​the detected object
+# Pass in the values ​​of the four vertices returned by cv2.boxPoints(rect) and return the extreme points
 def getROI(box):
     x_min = min(box[0, 0], box[1, 0], box[2, 0], box[3, 0])
     x_max = max(box[0, 0], box[1, 0], box[2, 0], box[3, 0])
@@ -53,8 +53,8 @@ def getROI(box):
 
     return (x_min, x_max, y_min, y_max)
 
-#除roi区域外全部变成黑色
-#传入图形，roi区域，图形分辨率
+#Everything turns black except the roi area
+#Incoming graphics, roi area, graphics resolution
 def getMaskROI(frame, roi, size):
     x_min, x_max, y_min, y_max = roi
     x_min -= 10

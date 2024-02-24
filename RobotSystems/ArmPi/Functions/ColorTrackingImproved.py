@@ -123,19 +123,19 @@ def reset():
     start_pick_up = False
     start_count_t1 = True
 
-# app初始化调用
+# app initialization call
 def init():
     print("ColorTracking Init")
     initMove()
 
-# app开始玩法调用
+# app starts gameplay call
 def start():
     global __isRunning
     reset()
     __isRunning = True
     print("ColorTracking Start")
 
-# app停止玩法调用
+# app stops gameplay call
 def stop():
     global _stop 
     global __isRunning
@@ -143,7 +143,7 @@ def stop():
     __isRunning = False
     print("ColorTracking Stop")
 
-# app退出玩法调用
+# app exit gameplay call
 def exit():
     global _stop
     global __isRunning
@@ -151,13 +151,11 @@ def exit():
     __isRunning = False
     print("ColorTracking Exit")
 
-rect = None
-size = (640, 480)
 rotation_angle = 0
 unreachable = False
 world_X, world_Y = 0, 0
 world_x, world_y = 0, 0
-# 机械臂移动线程
+# Robotic arm moving thread
 def move():
     global rect
     global track
@@ -291,14 +289,11 @@ def move():
                 time.sleep(1.5)
             time.sleep(0.01)
 
-# 运行子线程
-th = threading.Thread(target=move)
-th.setDaemon(True)
-th.start()
+# Run child thread
+# th = threading.Thread(target=move)
+# th.setDaemon(True)
+# th.start()
 
-t1 = 0
-roi = ()
-last_x, last_y = 0, 0
 def run(img):
     global roi
     global rect
@@ -327,12 +322,13 @@ def run(img):
      
     frame_resize = cv2.resize(img_copy, size, interpolation=cv2.INTER_NEAREST)
     frame_gb = cv2.GaussianBlur(frame_resize, (11, 11), 11)
+    
     #If a recognized object is detected in a certain area, the area is detected until there is no recognized object.
     if get_roi and start_pick_up:
         get_roi = False
         frame_gb = getMaskROI(frame_gb, roi, size)    
     
-    frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  # 将图像转换到LAB空间
+    frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  #Convert image to LAB space
     
     area_max = 0
     areaMaxContour = 0
@@ -340,7 +336,7 @@ def run(img):
         for i in color_range:
             if i in __target_color:
                 detect_color = i
-                frame_mask = cv2.inRange(frame_lab, color_range[detect_color][0], color_range[detect_color][1])  # 对原图像和掩模进行位运算
+                frame_mask = cv2.inRange(frame_lab, color_range[detect_color][0], color_range[detect_color][1])  #Perform bit operations on original image and mask
                 opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
                 closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
                 contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]  # find the outline
@@ -363,6 +359,7 @@ def run(img):
             last_x, last_y = world_x, world_y
             track = True
             #print(count,distance)
+
             # Cumulative judgment
             if action_finish:
                 if distance < 0.3:
@@ -385,17 +382,139 @@ def run(img):
                     center_list = []
     return img
 
+class TrackBox():
+    def __init__(self):
+        self.roi = ()
+        self.rect = None
+        self.area_max = 0
+        self.areaMaxContour = 0
+        self.frame_lab = None
+        self.img = None
+        self.size = (640, 480)
+        self.square_length = 3
+        self.t1 = 0
+        self.last_x = 0
+        self.last_y = 0
+
+    def img_preprocess(self):
+        global start_pick_up
+        global __isRunning
+
+        img_copy = self.img.copy()
+        img_h, img_w = self.img.shape[:2]
+        cv2.line(self.img, (0, int(img_h / 2)), (img_w, int(img_h / 2)), (0, 0, 200), 1)
+        cv2.line(self.img, (int(img_w / 2), 0), (int(img_w / 2), img_h), (0, 0, 200), 1)
+        
+        if not __isRunning:
+            return self.img
+        
+        frame_resize = cv2.resize(img_copy, self.size, interpolation=cv2.INTER_NEAREST)
+        frame_gb = cv2.GaussianBlur(frame_resize, (11, 11), 11)
+        
+        #If a recognized object is detected in a certain area, the area is detected until there is no recognized object.
+        if get_roi and start_pick_up:
+            get_roi = False
+            frame_gb = getMaskROI(frame_gb, self.roi, self.size)    
+        
+        self.frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  #Convert image to LAB space
+    
+    def get_contour(self):
+        global detect_color
+
+        frame_mask = cv2.inRange(self.frame_lab, color_range[detect_color][0], color_range[detect_color][1])  #Perform bit operations on original image and mask
+        opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
+        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
+        contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]  # find the outline
+        self.areaMaxContour, self.area_max = getAreaMaxContour(contours)  # Find the maximum contour
+    
+    def track(self):
+        global track
+        global get_roi
+        global detect_color
+        global world_x, world_y
+
+        self.rect = cv2.minAreaRect(self.areaMaxContour)
+        box = np.int0(cv2.boxPoints(self.rect))
+
+        self.roi = getROI(box) #Get roi area
+        get_roi = True
+
+        img_centerx, img_centery = getCenter(self.rect, self.roi, self.size, self.square_length)  # Get the center coordinates of the wooden block
+        world_x, world_y = convertCoordinate(img_centerx, img_centery, self.size) #Convert to real world coordinates
+        
+        
+        cv2.drawContours(img, [box], -1, range_rgb[detect_color], 2)
+        cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, range_rgb[detect_color], 1) #draw center point
+        distance = math.sqrt(pow(world_x - self.last_x, 2) + pow(world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
+        self.last_x, self.last_y = world_x, world_y
+        track = True
+    
+    def wait_and_pickup(self):
+        global start_count_t1
+        global world_X, world_Y
+        global start_pick_up
+        global world_x, world_y
+        global count
+        global center_list
+        global action_finish
+        global rotation_angle
+
+        if action_finish:
+            if distance < 0.3:
+                center_list.extend((world_x, world_y))
+                count += 1
+                if start_count_t1:
+                    start_count_t1 = False
+                    self.t1 = time.time()
+                if time.time() - self.t1 > 1.5:
+                    rotation_angle = self.rect[2]
+                    start_count_t1 = True
+                    world_X, world_Y = np.mean(np.array(center_list).reshape(count, 2), axis=0)
+                    count = 0
+                    center_list = []
+                    start_pick_up = True
+            else:
+                self.t1 = time.time()
+                start_count_t1 = True
+                count = 0
+                center_list = []
+        
+    def run_tracking(self, img):
+        global start_pick_up
+
+        self.img = img
+
+        self.img_preprocess()
+
+        if not start_pick_up:
+            for i in color_range:
+                if i in __target_color:
+                    self.get_contour()
+            if area_max > 2500:  # Found the largest area
+                self.track()
+
+                # Cumulative judgment
+                self.wait_and_pickup()
+
+        return img
+        
+
 if __name__ == '__main__':
     init()
     start()
     __target_color = ('green', )
     my_camera = Camera.Camera()
     my_camera.camera_open()
+
+    track = TrackBox()
+
     while True:
         img = my_camera.frame
         if img is not None:
             frame = img.copy()
-            Frame = run(frame)           
+            # Frame = run(frame)
+            track.run_tracking(frame)           
             cv2.imshow('Frame', Frame)
             key = cv2.waitKey(1)
             if key == 27:
