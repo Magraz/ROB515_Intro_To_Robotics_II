@@ -302,60 +302,72 @@ class TrackBox():
     
     def move_pick_up(self):
         self.action_finish = False
+
         if not self.__isRunning: # Stop and exit flag detection
-            continue
+            return True
+
         Board.setBusServoPulse(1, self.servo1 - 280, 500)  # Claws spread
+
         # Calculate the angle by which the gripper needs to be rotated
         servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
         Board.setBusServoPulse(2, servo2_angle, 500)
         time.sleep(0.8)
         
         if not self.__isRunning:
-            continue
+            return True
+
         self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0)  # lower the altitude
         time.sleep(2)
         
         if not self.__isRunning:
-            continue
+            return True
+
         Board.setBusServoPulse(1, self.servo1, 500)  # Gripper closed
         time.sleep(1)
         
         if not self.__isRunning:
-            continue
+            return True
+
         Board.setBusServoPulse(2, 500, 500)
         self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0)  # Robotic arm raised
         time.sleep(1)
         
         if not self.__isRunning:
-            continue
+            return True
+
         #Classify and place blocks of different colors
-        result = self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)   
+        result = self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
         time.sleep(result[2]/1000)
         
         if not self.__isRunning:
-            continue
-        servo2_angle = getAngle(coordinate[self.detect_color][0], coordinate[self.detect_color][1], -90)
+            return True
+
+        servo2_angle = getAngle(self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], -90)
         Board.setBusServoPulse(2, servo2_angle, 500)
         time.sleep(0.5)
 
         if not self.__isRunning:
-            continue
-        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
         time.sleep(0.5)
         
         if not self.__isRunning:
-            continue
-        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color]), -90, -90, 0, 1000)
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
         time.sleep(0.8)
         
         if not self.__isRunning:
-            continue
+            return True
+
         Board.setBusServoPulse(1, self.servo1 - 200, 500)  #Open your claws and drop the object
         time.sleep(0.8)
         
         if not self.__isRunning:
-            continue                    
-        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)
+            return True    
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)
         time.sleep(0.8)
 
         self.initMove()  #Return to initial position
@@ -367,12 +379,17 @@ class TrackBox():
         self.action_finish = True
         self.start_pick_up = False
 
+        return False
+
     def move_track(self):
         if not self.__isRunning: #Stop and exit flag detection
-            continue
+            return True
+
         self.ArmIK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
         time.sleep(0.02)                    
         self.track = False
+        
+        return False
     
     def move_stop(self):
         self._stop = False
@@ -402,11 +419,17 @@ class TrackBox():
 
                     if self.track: #If it is the tracking stage
 
-                        self.move_track()
+                        exit_loop = self.move_track()
+
+                        if exit_loop:
+                            continue
 
                     if self.start_pick_up: #If the object has not moved for a while, start gripping
 
-                        self.move_pick_up()
+                        exit_loop = self.move_pick_up()
+
+                        if exit_loop:
+                            continue
                         
                     else:
                         time.sleep(0.01)
@@ -414,7 +437,7 @@ class TrackBox():
                 if self._stop:
 
                     self.move_stop()
-                    
+
                 time.sleep(0.01)
 
 if __name__ == '__main__':
