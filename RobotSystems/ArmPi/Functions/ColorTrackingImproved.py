@@ -286,8 +286,102 @@ class TrackBox():
 
         return self.img
     
-    def first_detection(self):
+    def move_first_detection(self):
+        self.action_finish = False
+        self.setBuzzer(0.1)               
+        result = self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
+
+        if result == False:
+            self.unreachable = True
+        else:
+            self.unreachable = False
+        time.sleep(result[2]/1000) #The third item of the return parameter is the time
+        self.start_pick_up = False
+        self.first_move = False
+        self.action_finish = True
+    
+    def move_pick_up(self):
+        self.action_finish = False
+        if not self.__isRunning: # Stop and exit flag detection
+            continue
+        Board.setBusServoPulse(1, self.servo1 - 280, 500)  # Claws spread
+        # Calculate the angle by which the gripper needs to be rotated
+        servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.8)
         
+        if not self.__isRunning:
+            continue
+        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0)  # lower the altitude
+        time.sleep(2)
+        
+        if not self.__isRunning:
+            continue
+        Board.setBusServoPulse(1, self.servo1, 500)  # Gripper closed
+        time.sleep(1)
+        
+        if not self.__isRunning:
+            continue
+        Board.setBusServoPulse(2, 500, 500)
+        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0)  # Robotic arm raised
+        time.sleep(1)
+        
+        if not self.__isRunning:
+            continue
+        #Classify and place blocks of different colors
+        result = self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)   
+        time.sleep(result[2]/1000)
+        
+        if not self.__isRunning:
+            continue
+        servo2_angle = getAngle(coordinate[self.detect_color][0], coordinate[self.detect_color][1], -90)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.5)
+
+        if not self.__isRunning:
+            continue
+        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
+        time.sleep(0.5)
+        
+        if not self.__isRunning:
+            continue
+        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color]), -90, -90, 0, 1000)
+        time.sleep(0.8)
+        
+        if not self.__isRunning:
+            continue
+        Board.setBusServoPulse(1, self.servo1 - 200, 500)  #Open your claws and drop the object
+        time.sleep(0.8)
+        
+        if not self.__isRunning:
+            continue                    
+        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)
+        time.sleep(0.8)
+
+        self.initMove()  #Return to initial position
+        time.sleep(1.5)
+
+        self.detect_color = 'None'
+        self.first_move = True
+        self.get_roi = False
+        self.action_finish = True
+        self.start_pick_up = False
+
+    def move_track(self):
+        if not self.__isRunning: #Stop and exit flag detection
+            continue
+        self.ArmIK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
+        time.sleep(0.02)                    
+        self.track = False
+    
+    def move_stop(self):
+        self._stop = False
+        Board.setBusServoPulse(1, self.servo1 - 70, 300)
+        time.sleep(0.5)
+        Board.setBusServoPulse(2, 500, 500)
+        self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
+        time.sleep(1.5)
+
     def move(self):
 
         # Different color wood quick placement coordinates(x, y, z)
@@ -302,107 +396,25 @@ class TrackBox():
 
                 if self.first_move and self.start_pick_up: # When an object is first detected
 
-                    self.action_finish = False
-                    self.setBuzzer(0.1)               
-                    result = self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
-
-                    if result == False:
-                        self.unreachable = True
-                    else:
-                        self.unreachable = False
-                    time.sleep(result[2]/1000) #The third item of the return parameter is the time
-                    self.start_pick_up = False
-                    self.first_move = False
-                    self.action_finish = True
-
+                    self.move_first_detection()
 
                 elif not self.first_move and not self.unreachable: #This is not the first time an object is detected
 
                     if self.track: #If it is the tracking stage
 
-                        if not self.__isRunning: #Stop and exit flag detection
-                            continue
-                        self.ArmIK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
-                        time.sleep(0.02)                    
-                        self.track = False
+                        self.move_track()
 
                     if self.start_pick_up: #If the object has not moved for a while, start gripping
 
-                        self.action_finish = False
-                        if not self.__isRunning: # Stop and exit flag detection
-                            continue
-                        Board.setBusServoPulse(1, self.servo1 - 280, 500)  # Claws spread
-                        # Calculate the angle by which the gripper needs to be rotated
-                        servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
-                        Board.setBusServoPulse(2, servo2_angle, 500)
-                        time.sleep(0.8)
+                        self.move_pick_up()
                         
-                        if not self.__isRunning:
-                            continue
-                        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0)  # lower the altitude
-                        time.sleep(2)
-                        
-                        if not self.__isRunning:
-                            continue
-                        Board.setBusServoPulse(1, self.servo1, 500)  # Gripper closed
-                        time.sleep(1)
-                        
-                        if not self.__isRunning:
-                            continue
-                        Board.setBusServoPulse(2, 500, 500)
-                        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0)  # Robotic arm raised
-                        time.sleep(1)
-                        
-                        if not self.__isRunning:
-                            continue
-                        #Classify and place blocks of different colors
-                        result = self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)   
-                        time.sleep(result[2]/1000)
-                        
-                        if not self.__isRunning:
-                            continue
-                        servo2_angle = getAngle(coordinate[self.detect_color][0], coordinate[self.detect_color][1], -90)
-                        Board.setBusServoPulse(2, servo2_angle, 500)
-                        time.sleep(0.5)
-
-                        if not self.__isRunning:
-                            continue
-                        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
-                        time.sleep(0.5)
-                        
-                        if not self.__isRunning:
-                            continue
-                        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color]), -90, -90, 0, 1000)
-                        time.sleep(0.8)
-                        
-                        if not self.__isRunning:
-                            continue
-                        Board.setBusServoPulse(1, self.servo1 - 200, 500)  #Open your claws and drop the object
-                        time.sleep(0.8)
-                        
-                        if not self.__isRunning:
-                            continue                    
-                        self.ArmIK.setPitchRangeMoving((coordinate[self.detect_color][0], coordinate[self.detect_color][1], 12), -90, -90, 0)
-                        time.sleep(0.8)
-
-                        self.initMove()  #Return to initial position
-                        time.sleep(1.5)
-
-                        self.detect_color = 'None'
-                        self.first_move = True
-                        self.get_roi = False
-                        self.action_finish = True
-                        self.start_pick_up = False
                     else:
                         time.sleep(0.01)
             else:
                 if self._stop:
-                    self._stop = False
-                    Board.setBusServoPulse(1, self.servo1 - 70, 300)
-                    time.sleep(0.5)
-                    Board.setBusServoPulse(2, 500, 500)
-                    self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
-                    time.sleep(1.5)
+
+                    self.move_stop()
+                    
                 time.sleep(0.01)
 
 if __name__ == '__main__':
