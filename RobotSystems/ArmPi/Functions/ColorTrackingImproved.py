@@ -160,6 +160,7 @@ class TrackBox():
         self.frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  #Convert image to LAB space
     
     def get_contour(self, color):
+        TrackBox.detect_color = color
         frame_mask = cv2.inRange(self.frame_lab, color_range[color][0], color_range[color][1])  #Perform bit operations on original image and mask
         opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
         closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
@@ -172,7 +173,7 @@ class TrackBox():
                 self.max_area = self.area_max
                 self.color_area_max = index
 
-    def get_current_world_xy(self, color):
+    def get_current_world_xy(self):
         self.rect = cv2.minAreaRect(self.areaMaxContour)
         box = np.int0(cv2.boxPoints(self.rect))
 
@@ -183,9 +184,9 @@ class TrackBox():
         TrackBox.world_x, TrackBox.world_y = convertCoordinate(img_centerx, img_centery, self.size) #Convert to real world coordinates
         
         
-        cv2.drawContours(self.img, [box], -1, TrackBox.range_rgb[color], 2)
+        cv2.drawContours(self.img, [box], -1, TrackBox.range_rgb[TrackBox.detect_color], 2)
         cv2.putText(self.img, '(' + str(TrackBox.world_x) + ',' + str(TrackBox.world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, TrackBox.range_rgb[color], 1) #draw center point
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, TrackBox.range_rgb[TrackBox.detect_color], 1) #draw center point
         self.distance = math.sqrt(pow(TrackBox.world_x - self.last_x, 2) + pow(TrackBox.world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
         self.last_x, self.last_y = TrackBox.world_x, TrackBox.world_y
 
@@ -244,19 +245,19 @@ class TrackBox():
 
         self.img_preprocess()
 
-        #if not TrackBox.start_pick_up:
-        for i in color_range:
-            if i in TrackBox.__target_color:
-                self.get_contour(color=i)
-                #print(f'area {self.area_max}')
-                if self.area_max > 2500:  # Found the largest area
+        if not TrackBox.start_pick_up:
+            for color in color_range:
+                if color in TrackBox.__target_color:
+                    self.get_contour(color)
                     
-                    self.get_current_world_xy(color=i)
-                    TrackBox.track = True
+                    if self.area_max > 2500:  # Found the largest area
+                        
+                        self.get_current_world_xy()
+                        TrackBox.track = True
 
-                    #if TrackBox.action_finish:
-                    # Cumulative judgment
-                    self.get_avg_world_xy(distance=0.3)
+                        if TrackBox.action_finish:
+                            # Cumulative judgment
+                            self.get_avg_world_xy(distance=0.3)
 
         return self.img
 
