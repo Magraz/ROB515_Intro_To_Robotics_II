@@ -399,6 +399,7 @@ class TrackBox():
     def img_preprocess(self):
         global start_pick_up
         global __isRunning
+        global get_roi
 
         img_copy = self.img.copy()
         img_h, img_w = self.img.shape[:2]
@@ -427,8 +428,13 @@ class TrackBox():
         contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]  # find the outline
         self.areaMaxContour, self.area_max = getAreaMaxContour(contours)  # Find the maximum contour
     
-    def track(self):
-        global track
+    def find_largest_area(self, index):
+        if self.areaMaxContour is not None:
+            if self.area_max > self.max_area:#Find the largest area
+                self.max_area = self.area_max
+                self.color_area_max = index
+
+    def get_current_world_xy(self):
         global get_roi
         global detect_color
         global world_x, world_y
@@ -446,42 +452,69 @@ class TrackBox():
         cv2.drawContours(img, [box], -1, range_rgb[detect_color], 2)
         cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, range_rgb[detect_color], 1) #draw center point
-        distance = math.sqrt(pow(world_x - self.last_x, 2) + pow(world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
+        self.distance = math.sqrt(pow(world_x - self.last_x, 2) + pow(world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
         self.last_x, self.last_y = world_x, world_y
-        track = True
+
+    def select_color_to_detect(self):
+        global detect_color
+
+        if self.color_area_max == 'red':  #Red is the largest
+            self.color = 1
+        elif self.color_area_max == 'green':  #Green is the biggest
+            self.color = 2
+        elif self.color_area_max == 'blue':  #blue is the biggest
+            self.color = 3
+        else:
+            self.color = 0
     
-    def wait_and_pickup(self):
+        if len(self.color_list) == 3:  #multiple judgments
+            # take the average
+            self.color = int(round(np.mean(np.array(self.color_list))))
+            self.color_list = []
+        if self.color == 1:
+            detect_color = 'red'
+            self.draw_color = range_rgb["red"]
+        elif self.color == 2:
+            detect_color = 'green'
+            self.draw_color = range_rgb["green"]
+        elif self.color == 3:
+            detect_color = 'blue'
+            self.draw_color = range_rgb["blue"]
+        else:
+            detect_color = 'None'
+            self.draw_color = range_rgb["black"]
+    
+    def get_avg_world_xy(self, distance):
         global start_count_t1
         global world_X, world_Y
         global start_pick_up
         global world_x, world_y
         global count
         global center_list
-        global action_finish
         global rotation_angle
 
-        if action_finish:
-            if distance < 0.3:
-                center_list.extend((world_x, world_y))
-                count += 1
-                if start_count_t1:
-                    start_count_t1 = False
-                    self.t1 = time.time()
-                if time.time() - self.t1 > 1.5:
-                    rotation_angle = self.rect[2]
-                    start_count_t1 = True
-                    world_X, world_Y = np.mean(np.array(center_list).reshape(count, 2), axis=0)
-                    count = 0
-                    center_list = []
-                    start_pick_up = True
-            else:
+        if self.distance < distance:
+            center_list.extend((world_x, world_y))
+            count += 1
+            if start_count_t1:
+                start_count_t1 = False
                 self.t1 = time.time()
+            if time.time() - self.t1 > 1.5:
+                rotation_angle = self.rect[2]
                 start_count_t1 = True
+                world_X, world_Y = np.mean(np.array(center_list).reshape(count, 2), axis=0)
                 count = 0
                 center_list = []
+                start_pick_up = True
+        else:
+            self.t1 = time.time()
+            start_count_t1 = True
+            count = 0
+            center_list = []
         
     def run_tracking(self, img):
         global start_pick_up
+        global track
 
         self.img = img
 
@@ -491,11 +524,48 @@ class TrackBox():
             for i in color_range:
                 if i in __target_color:
                     self.get_contour()
-            if area_max > 2500:  # Found the largest area
-                self.track()
+            if self.area_max > 2500:  # Found the largest area
+                
+                self.get_current_world_xy()
+                track = True
 
-                # Cumulative judgment
-                self.wait_and_pickup()
+                if action_finish:
+                    # Cumulative judgment
+                    self.get_avg_world_xy(distance=0.3)
+
+        return img
+
+    def run_sorting(self, img):
+        global start_pick_up
+        global detect_color
+
+        self.img = img
+
+        self.img_preprocess()
+
+        self.color_area_max = None
+        self.max_area = 0
+        self.areaMaxContour_max = 0
+
+        if not start_pick_up:
+            for i in color_range:
+                if i in __target_color:
+                    self.get_contour()
+                    self.find_largest_area(index = i)
+            if self.max_area > 2500:  # Found the largest area
+
+                self.get_current_world_xy()
+
+                if not start_pick_up:
+                    self.select_color_to_detect()
+                    self.get_avg_world_xy(distance=0.5)
+
+                else:
+                    if not start_pick_up:
+                        self.draw_color = (0, 0, 0)
+                        detect_color = "None"
+
+        cv2.putText(img, "Color: " + detect_color, (10, img.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, self.draw_color, 2)
 
         return img
         
