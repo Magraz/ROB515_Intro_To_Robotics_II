@@ -16,31 +16,20 @@ if sys.version_info.major == 2:
     print('Please run this program with python3!')
     sys.exit(0)
 
-class TrackBox():
+class Status():
     def __init__(self):
-        self.ArmIK = ArmIK()
-
-        self.range_rgb = {
-            'red': (0, 0, 255),
-            'blue': (255, 0, 0),
-            'green': (0, 255, 0),
-            'black': (0, 0, 0),
-            'white': (255, 255, 255),
-        }
-
-        self.count = 0
-        self.track = False
         self._stop = False
+        self.track = False
         self.get_roi = False
-        self.center_list = []
         self.first_move = True
-        self.__isRunning = False
-        self.detect_color = 'None'
+        self.isRunning = False
         self.action_finish = True
         self.start_pick_up = False
         self.start_count_t1 = True
-
-        self.__target_color = ()
+        self.detect_color = 'None'
+        self.target_color = ()
+        self.center_list = []
+        self.count = 0
 
         self.rotation_angle = 0
         self.unreachable = False
@@ -49,6 +38,56 @@ class TrackBox():
 
         # The angle at which the gripper closes when clamping
         self.servo1 = 500
+
+    
+    # 变量重置
+    def reset(self):
+        self._stop = False
+        self.track = False
+        self.get_roi = False
+        self.first_move = True
+        self.action_finish = True
+        self.start_pick_up = False
+        self.start_count_t1 = True
+        self.detect_color = 'None'
+        self.target_color = ()
+        self.center_list = []
+        self.count = 0
+
+    # app starts gameplay call
+    def start(self):
+        self.reset()
+        self.isRunning = True
+        print("ColorTracking Start")
+
+    # app stops gameplay call
+    def stop(self):
+        self._stop = True
+        self.isRunning = False
+        print("ColorTracking Stop")
+
+    # app exit gameplay call
+    def exit(self):
+        self._stop = True
+        self.isRunning = False
+        print("ColorTracking Exit")
+    
+    # Set detection color
+    def setTargetColor(self,target_color):
+        self.target_color = target_color
+        return (True, ())
+
+class TrackBox():
+    def __init__(self, status: Status):
+        self.status = status
+
+        self.range_rgb = {
+            'red': (0, 0, 255),
+            'blue': (255, 0, 0),
+            'green': (0, 255, 0),
+            'black': (0, 0, 0),
+            'white': (255, 255, 255),
+        }
 
         self.roi = ()
         self.rect = None
@@ -61,12 +100,6 @@ class TrackBox():
         self.t1 = 0
         self.last_x = 0
         self.last_y = 0
-
-    # Set detection color
-    def setTargetColor(self,target_color):
-        #print("COLOR", target_color)
-        self.__target_color = target_color
-        return (True, ())
 
     # Find the contour with the largest area
     # The argument is a list of contours to compare
@@ -84,76 +117,27 @@ class TrackBox():
 
         return area_max_contour, contour_area_max  # 返回最大的轮廓
 
-    # 初始位置
-    def initMove(self):
-        Board.setBusServoPulse(1, self.servo1 - 50, 300)
-        Board.setBusServoPulse(2, 500, 500)
-        self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
-
-    def setBuzzer(self,timer):
-        Board.setBuzzer(0)
-        Board.setBuzzer(1)
-        time.sleep(timer)
-        Board.setBuzzer(0)
-    
-    # 变量重置
-    def reset(self):
-        self.count = 0
-        self._stop = False
-        self.track = False
-        self.get_roi = False
-        self.center_list = []
-        self.first_move = True
-        self.__target_color = ()
-        self.detect_color = 'None'
-        self.action_finish = True
-        self.start_pick_up = False
-        self.start_count_t1 = True
-
-    # app initialization call
-    def init(self):
-        print("ColorTracking Init")
-        self.initMove()
-
-    # app starts gameplay call
-    def start(self):
-        self.reset()
-        self.__isRunning = True
-        print("ColorTracking Start")
-
-    # app stops gameplay call
-    def stop(self):
-        self._stop = True
-        self.__isRunning = False
-        print("ColorTracking Stop")
-
-    # app exit gameplay call
-    def exit(self):
-        self._stop = True
-        self.__isRunning = False
-        print("ColorTracking Exit")
-
     def img_preprocess(self):
         img_copy = self.img.copy()
         img_h, img_w = self.img.shape[:2]
         cv2.line(self.img, (0, int(img_h / 2)), (img_w, int(img_h / 2)), (0, 0, 200), 1)
         cv2.line(self.img, (int(img_w / 2), 0), (int(img_w / 2), img_h), (0, 0, 200), 1)
         
-        if not self.__isRunning:
+        if not self.status.isRunning:
             return self.img
         
         frame_resize = cv2.resize(img_copy, self.size, interpolation=cv2.INTER_NEAREST)
         frame_gb = cv2.GaussianBlur(frame_resize, (11, 11), 11)
         
         #If a recognized object is detected in a certain area, the area is detected until there is no recognized object.
-        if self.get_roi and self.start_pick_up:
-            self.get_roi = False
+        if self.status.get_roi and self.status.start_pick_up:
+            self.status.get_roi = False
             frame_gb = getMaskROI(frame_gb, self.roi, self.size)    
         
         self.frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  #Convert image to LAB space
     
     def get_contour(self, color):
-        self.detect_color = color
+        self.status.detect_color = color
         frame_mask = cv2.inRange(self.frame_lab, color_range[color][0], color_range[color][1])  #Perform bit operations on original image and mask
         opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
         closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
@@ -171,17 +155,17 @@ class TrackBox():
         box = np.int0(cv2.boxPoints(self.rect))
 
         self.roi = getROI(box) #Get roi area
-        self.get_roi = True
+        self.status.get_roi = True
 
         img_centerx, img_centery = getCenter(self.rect, self.roi, self.size, self.square_length)  # Get the center coordinates of the wooden block
-        self.world_x, self.world_y = convertCoordinate(img_centerx, img_centery, self.size) #Convert to real world coordinates
+        self.status.world_x, self.status.world_y = convertCoordinate(img_centerx, img_centery, self.size) #Convert to real world coordinates
         
         
-        cv2.drawContours(self.img, [box], -1, self.range_rgb[self.detect_color], 2)
-        cv2.putText(self.img, '(' + str(self.world_x) + ',' + str(self.world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.detect_color], 1) #draw center point
-        self.distance = math.sqrt(pow(self.world_x - self.last_x, 2) + pow(self.world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
-        self.last_x, self.last_y = self.world_x, self.world_y
+        cv2.drawContours(self.img, [box], -1, self.range_rgb[self.status.detect_color], 2)
+        cv2.putText(self.img, '(' + str(self.status.world_x) + ',' + str(self.status.world_y) + ')', (min(box[0, 0], box[2, 0]), box[2, 1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.status.detect_color], 1) #draw center point
+        self.distance = math.sqrt(pow(self.status.world_x - self.last_x, 2) + pow(self.status.world_y - self.last_y, 2)) #Compare the last coordinates to determine whether to move
+        self.last_x, self.last_y = self.status.world_x, self.status.world_y
 
     def select_color_to_detect(self):
 
@@ -194,43 +178,43 @@ class TrackBox():
         else:
             self.color = 0
     
-        if len(self.color_list) == 3:  #multiple judgments
+        if len(self.status.color_list) == 3:  #multiple judgments
             # take the average
             self.color = int(round(np.mean(np.array(self.color_list))))
             self.color_list = []
         if self.color == 1:
-            self.detect_color = 'red'
+            self.status.detect_color = 'red'
             self.draw_color = range_rgb["red"]
         elif self.color == 2:
-            self.detect_color = 'green'
+            self.status.detect_color = 'green'
             self.draw_color = range_rgb["green"]
         elif self.color == 3:
-            self.detect_color = 'blue'
+            self.status.detect_color = 'blue'
             self.draw_color = range_rgb["blue"]
         else:
-            self.detect_color = 'None'
+            self.status.detect_color = 'None'
             self.draw_color = range_rgb["black"]
     
     def get_avg_world_xy(self, distance):
 
         if self.distance < distance:
-            self.center_list.extend((self.world_x, self.world_y))
-            self.count += 1
-            if self.start_count_t1:
-                self.start_count_t1 = False
+            self.status.center_list.extend((self.status.world_x, self.status.world_y))
+            self.status.count += 1
+            if self.status.start_count_t1:
+                self.status.start_count_t1 = False
                 self.t1 = time.time()
             if time.time() - self.t1 > 1.5:
                 self.rotation_angle = self.rect[2]
-                self.start_count_t1 = True
-                self.world_X, self.world_Y = np.mean(np.array(self.center_list).reshape(self.count, 2), axis=0)
-                self.count = 0
-                self.center_list = []
-                self.start_pick_up = True
+                self.status.start_count_t1 = True
+                self.status.world_X, self.status.world_Y = np.mean(np.array(self.status.center_list).reshape(self.status.count, 2), axis=0)
+                self.status.count = 0
+                self.status.center_list = []
+                self.status.start_pick_up = True
         else:
             self.t1 = time.time()
-            self.start_count_t1 = True
-            self.count = 0
-            self.center_list = []
+            self.status.start_count_t1 = True
+            self.status.count = 0
+            self.status.center_list = []
         
     def run_tracking(self, img):
 
@@ -238,17 +222,17 @@ class TrackBox():
 
         self.img_preprocess()
 
-        if not self.start_pick_up:
+        if not self.status.start_pick_up:
             for color in color_range:
-                if color in self.__target_color:
+                if color in self.status.target_color:
                     self.get_contour(color)
                     
                     if self.area_max > 2500:  # Found the largest area
                         
                         self.get_current_world_xy()
-                        self.track = True
+                        self.status.track = True
 
-                        if self.action_finish:
+                        if self.status.action_finish:
                             # Cumulative judgment
                             self.get_avg_world_xy(distance=0.3)
 
@@ -266,7 +250,7 @@ class TrackBox():
 
         if not self.start_pick_up:
             for i in color_range:
-                if i in __target_color:
+                if i in target_color:
                     self.get_contour()
                     self.find_largest_area(index = i)
             if self.max_area > 2500:  # Found the largest area
@@ -286,120 +270,13 @@ class TrackBox():
 
         return self.img
     
-    def move_first_detection(self):
-        self.action_finish = False
-        self.setBuzzer(0.1)               
-        result = self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
 
-        if result == False:
-            self.unreachable = True
-        else:
-            self.unreachable = False
-        time.sleep(result[2]/1000) #The third item of the return parameter is the time
-        self.start_pick_up = False
-        self.first_move = False
-        self.action_finish = True
-    
-    def move_pick_up(self):
-        self.action_finish = False
+class Movement():
+    def __init__(self, status_obj: Status):
+        self.ArmIK = ArmIK()
+        self.status = status_obj
 
-        if not self.__isRunning: # Stop and exit flag detection
-            return True
-
-        Board.setBusServoPulse(1, self.servo1 - 280, 500)  # Claws spread
-
-        # Calculate the angle by which the gripper needs to be rotated
-        servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
-        Board.setBusServoPulse(2, servo2_angle, 500)
-        time.sleep(0.8)
-        
-        if not self.__isRunning:
-            return True
-
-        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0)  # lower the altitude
-        time.sleep(2)
-        
-        if not self.__isRunning:
-            return True
-
-        Board.setBusServoPulse(1, self.servo1, 500)  # Gripper closed
-        time.sleep(1)
-        
-        if not self.__isRunning:
-            return True
-
-        Board.setBusServoPulse(2, 500, 500)
-        self.ArmIK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0)  # Robotic arm raised
-        time.sleep(1)
-        
-        if not self.__isRunning:
-            return True
-
-        #Classify and place blocks of different colors
-        result = self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
-        time.sleep(result[2]/1000)
-        
-        if not self.__isRunning:
-            return True
-
-        servo2_angle = getAngle(self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], -90)
-        Board.setBusServoPulse(2, servo2_angle, 500)
-        time.sleep(0.5)
-
-        if not self.__isRunning:
-            return True
-
-        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
-        time.sleep(0.5)
-        
-        if not self.__isRunning:
-            return True
-
-        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
-        time.sleep(0.8)
-        
-        if not self.__isRunning:
-            return True
-
-        Board.setBusServoPulse(1, self.servo1 - 200, 500)  #Open your claws and drop the object
-        time.sleep(0.8)
-        
-        if not self.__isRunning:
-            return True    
-
-        self.ArmIK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)
-        time.sleep(0.8)
-
-        self.initMove()  #Return to initial position
-        time.sleep(1.5)
-
-        self.detect_color = 'None'
-        self.first_move = True
-        self.get_roi = False
-        self.action_finish = True
-        self.start_pick_up = False
-
-        return False
-
-    def move_track(self):
-        if not self.__isRunning: #Stop and exit flag detection
-            return True
-
-        self.ArmIK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
-        time.sleep(0.02)                    
-        self.track = False
-        
-        return False
-    
-    def move_stop(self):
-        self._stop = False
-        Board.setBusServoPulse(1, self.servo1 - 70, 300)
-        time.sleep(0.5)
-        Board.setBusServoPulse(2, 500, 500)
-        self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
-        time.sleep(1.5)
-
-    def move(self):
+        print(self.status._stop)
 
         # Different color wood quick placement coordinates(x, y, z)
         self.coordinate = {
@@ -408,23 +285,154 @@ class TrackBox():
             'blue':  (-15 + 0.5, 0 - 0.5,  1.5),
         }
 
-        while True:
-            if self.__isRunning:
+    # 初始位置
+    def initMove(self):
+        print("ColorTracking Init")
+        Board.setBusServoPulse(1, self.status.servo1 - 50, 300)
+        Board.setBusServoPulse(2, 500, 500)
+        self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
 
-                if self.first_move and self.start_pick_up: # When an object is first detected
+    def setBuzzer(self,timer):
+        Board.setBuzzer(0)
+        Board.setBuzzer(1)
+        time.sleep(timer)
+        Board.setBuzzer(0)
+    
+    def move_first_detection(self):
+        self.status.action_finish = False
+
+        self.setBuzzer(0.1)               
+        result = self.ArmIK.setPitchRangeMoving((self.status.world_X, self.status.world_Y - 2, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
+
+        if result == False:
+            self.status.unreachable = True
+        else:
+            self.status.unreachable = False
+        time.sleep(result[2]/1000) #The third item of the return parameter is the time
+
+        self.status.start_pick_up = False
+        self.status.first_move = False
+        self.status.action_finish = True
+    
+    def move_pick_up(self):
+        self.status.action_finish = False
+
+        if not self.status.isRunning: # Stop and exit flag detection
+            return True
+
+        Board.setBusServoPulse(1, self.status.servo1 - 280, 500)  # Claws spread
+
+        # Calculate the angle by which the gripper needs to be rotated
+        servo2_angle = getAngle(self.status.world_X, self.status.world_Y, self.status.rotation_angle)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.8)
+        
+        if not self.status.isRunning:
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.status.world_X, self.status.world_Y, 2), -90, -90, 0)  # lower the altitude
+        time.sleep(2)
+        
+        if not self.status.isRunning:
+            return True
+
+        Board.setBusServoPulse(1, self.status.servo1, 500)  # Gripper closed
+        time.sleep(1)
+        
+        if not self.status.isRunning:
+            return True
+
+        Board.setBusServoPulse(2, 500, 500)
+        self.ArmIK.setPitchRangeMoving((self.status.world_X, self.status.world_Y, 12), -90, -90, 0)  # Robotic arm raised
+        time.sleep(1)
+        
+        if not self.status.isRunning:
+            return True
+
+        #Classify and place blocks of different colors
+        result = self.ArmIK.setPitchRangeMoving((self.coordinate[self.status.detect_color][0], self.coordinate[self.status.detect_color][1], 12), -90, -90, 0)   
+        time.sleep(result[2]/1000)
+        
+        if not self.status.isRunning:
+            return True
+
+        servo2_angle = getAngle(self.coordinate[self.status.detect_color][0], self.coordinate[self.status.detect_color][1], -90)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.5)
+
+        if not self.status.isRunning:
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.status.detect_color][0], self.coordinate[self.status.detect_color][1], self.coordinate[self.status.detect_color][2] + 3), -90, -90, 0, 500)
+        time.sleep(0.5)
+        
+        if not self.status.isRunning:
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.status.detect_color]), -90, -90, 0, 1000)
+        time.sleep(0.8)
+        
+        if not self.status.isRunning:
+            return True
+
+        Board.setBusServoPulse(1, self.status.servo1 - 200, 500)  #Open your claws and drop the object
+        time.sleep(0.8)
+        
+        if not self.status.isRunning:
+            return True    
+
+        self.ArmIK.setPitchRangeMoving((self.coordinate[self.status.detect_color][0], self.coordinate[self.status.detect_color][1], 12), -90, -90, 0)
+        time.sleep(0.8)
+
+        self.initMove()  #Return to initial position
+        time.sleep(1.5)
+
+        self.status.detect_color = 'None'
+        self.status.first_move = True
+        self.status.get_roi = False
+        self.status.action_finish = True
+        self.status.start_pick_up = False
+
+        return False
+
+    def move_track(self):
+        if not self.status.isRunning: #Stop and exit flag detection
+            return True
+
+        self.ArmIK.setPitchRangeMoving((self.status.world_x, self.status.world_y - 2, 5), -90, -90, 0, 20)
+        time.sleep(0.02)                    
+        self.status.track = False
+        
+        return False
+    
+    def move_stop(self):
+        self.status._stop = False
+
+        Board.setBusServoPulse(1, self.status.servo1 - 70, 300)
+        time.sleep(0.5)
+        Board.setBusServoPulse(2, 500, 500)
+        self.ArmIK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
+        time.sleep(1.5)
+
+    def move(self):
+
+        while True:
+            if self.status.isRunning:
+
+                if self.status.first_move and self.status.start_pick_up: # When an object is first detected
 
                     self.move_first_detection()
 
-                elif not self.first_move and not self.unreachable: #This is not the first time an object is detected
+                elif not self.status.first_move and not self.status.unreachable: #This is not the first time an object is detected
 
-                    if self.track: #If it is the tracking stage
+                    if self.status.track: #If it is the tracking stage
 
                         exit_loop = self.move_track()
 
                         if exit_loop:
                             continue
 
-                    if self.start_pick_up: #If the object has not moved for a while, start gripping
+                    if self.status.start_pick_up: #If the object has not moved for a while, start gripping
 
                         exit_loop = self.move_pick_up()
 
@@ -434,7 +442,7 @@ class TrackBox():
                     else:
                         time.sleep(0.01)
             else:
-                if self._stop:
+                if self.status._stop:
 
                     self.move_stop()
 
@@ -442,18 +450,20 @@ class TrackBox():
 
 if __name__ == '__main__':
 
-    track = TrackBox()
+    status = Status()
+    movement = Movement(status)
+    track = TrackBox(status)
 
     # Run child thread
-    th = threading.Thread(target=track.move)
+    th = threading.Thread(target=movement.move)
     th.setDaemon(True)
     th.start()
 
-    track.init()
-    track.start()
+    movement.initMove()
+    status.start()
 
-    __target_color = ('green')
-    track.setTargetColor(__target_color)
+    target_color = ('green')
+    status.setTargetColor(target_color)
 
     my_camera = Camera.Camera()
     my_camera.camera_open()
