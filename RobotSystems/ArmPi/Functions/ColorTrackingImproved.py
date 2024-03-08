@@ -100,6 +100,8 @@ class TrackBox():
         self.t1 = 0
         self.last_x = 0
         self.last_y = 0
+        self.color_list = []
+        self.draw_color = (0, 0, 0)
 
     # Find the contour with the largest area
     # The argument is a list of contours to compare
@@ -137,7 +139,6 @@ class TrackBox():
         self.frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)  #Convert image to LAB space
     
     def get_contour(self, color):
-        self.status.detect_color = color
         frame_mask = cv2.inRange(self.frame_lab, color_range[color][0], color_range[color][1])  #Perform bit operations on original image and mask
         opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))  # Open operation
         closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))  # closed operation
@@ -177,23 +178,25 @@ class TrackBox():
             self.color = 3
         else:
             self.color = 0
+
+        #self.color_list.append(self.color)
     
-        if len(self.status.color_list) == 3:  #multiple judgments
+        if len(self.color_list) == 3:  #multiple judgments
             # take the average
             self.color = int(round(np.mean(np.array(self.color_list))))
             self.color_list = []
         if self.color == 1:
             self.status.detect_color = 'red'
-            self.draw_color = range_rgb["red"]
+            self.draw_color = self.range_rgb["red"]
         elif self.color == 2:
             self.status.detect_color = 'green'
-            self.draw_color = range_rgb["green"]
+            self.draw_color = self.range_rgb["green"]
         elif self.color == 3:
             self.status.detect_color = 'blue'
-            self.draw_color = range_rgb["blue"]
+            self.draw_color = self.range_rgb["blue"]
         else:
             self.status.detect_color = 'None'
-            self.draw_color = range_rgb["black"]
+            self.draw_color = self.range_rgb["black"]
     
     def get_avg_world_xy(self, distance):
 
@@ -219,13 +222,17 @@ class TrackBox():
     def run_tracking(self, img):
 
         self.img = img
-
+        self.max_area = 0
         self.img_preprocess()
 
         if not self.status.start_pick_up:
             for color in color_range:
                 if color in self.status.target_color:
                     self.get_contour(color)
+
+                    if not self.status.track:
+                        self.find_largest_area(index = color)
+                        self.status.detect_color = self.color_area_max
                     
                     if self.area_max > 2500:  # Found the largest area
                         
@@ -248,25 +255,25 @@ class TrackBox():
         self.max_area = 0
         self.areaMaxContour_max = 0
 
-        if not self.start_pick_up:
+        if not self.status.start_pick_up:
             for i in color_range:
-                if i in target_color:
-                    self.get_contour()
+                if i in self.status.target_color:
+                    self.get_contour(i)
                     self.find_largest_area(index = i)
             if self.max_area > 2500:  # Found the largest area
 
                 self.get_current_world_xy()
 
-                if not self.start_pick_up:
+                if not self.status.start_pick_up:
                     self.select_color_to_detect()
                     self.get_avg_world_xy(distance=0.5)
 
                 else:
-                    if not self.start_pick_up:
+                    if not self.status.start_pick_up:
                         self.draw_color = (0, 0, 0)
-                        self.detect_color = "None"
+                        self.status.detect_color = "None"
 
-        cv2.putText(img, "Color: " + self.detect_color, (10, img.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, self.draw_color, 2)
+        cv2.putText(img, "Color: " + self.status.detect_color, (10, img.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, self.draw_color, 2)
 
         return self.img
     
@@ -275,8 +282,6 @@ class Movement():
     def __init__(self, status_obj: Status):
         self.ArmIK = ArmIK()
         self.status = status_obj
-
-        print(self.status._stop)
 
         # Different color wood quick placement coordinates(x, y, z)
         self.coordinate = {
@@ -301,7 +306,7 @@ class Movement():
     def move_first_detection(self):
         self.status.action_finish = False
 
-        self.setBuzzer(0.1)               
+        # self.setBuzzer(0.1)               
         result = self.ArmIK.setPitchRangeMoving((self.status.world_X, self.status.world_Y - 2, 5), -90, -90, 0) # If the running time parameter is not filled in, the running time will be adaptive.
 
         if result == False:
@@ -350,6 +355,7 @@ class Movement():
             return True
 
         #Classify and place blocks of different colors
+        print(self.status.detect_color)
         result = self.ArmIK.setPitchRangeMoving((self.coordinate[self.status.detect_color][0], self.coordinate[self.status.detect_color][1], 12), -90, -90, 0)   
         time.sleep(result[2]/1000)
         
@@ -462,7 +468,7 @@ if __name__ == '__main__':
     movement.initMove()
     status.start()
 
-    target_color = ('green')
+    target_color = ('green', 'red')
     status.setTargetColor(target_color)
 
     my_camera = Camera.Camera()
@@ -473,7 +479,8 @@ if __name__ == '__main__':
         if img is not None:
             frame = img.copy()
             # Frame = run(frame)
-            frame = track.run_tracking(frame)           
+            frame = track.run_tracking(frame) 
+            #frame = track.run_sorting(frame)           
             cv2.imshow('Frame', frame)
             key = cv2.waitKey(1)
             if key == 27:
