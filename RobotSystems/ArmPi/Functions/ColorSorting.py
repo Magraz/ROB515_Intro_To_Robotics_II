@@ -163,8 +163,8 @@ def move():
             if detect_color != 'None' and start_pick_up:  #如果检测到方块没有移动一段时间后，开始夹取
                 #移到目标位置，高度6cm, 通过返回的结果判断是否能到达指定位置
                 #如果不给出运行时间参数，则自动计算，并通过结果返回
-                set_rgb(detect_color)
-                setBuzzer(0.1)
+                #set_rgb(detect_color)
+                #setBuzzer(0.1)
                 result = AK.setPitchRangeMoving((world_X, world_Y, 7), -90, -90, 0)  
                 if result == False:
                     unreachable = True
@@ -181,7 +181,7 @@ def move():
                     
                     if not __isRunning:
                         continue
-                    AK.setPitchRangeMoving((world_X, world_Y, 1.5), -90, -90, 0, 1000)
+                    AK.setPitchRangeMoving((world_X, world_Y, 1.5), -90, -90, 0, 0)
                     time.sleep(1.5)
 
                     if not __isRunning:
@@ -232,7 +232,7 @@ def move():
                     detect_color = 'None'
                     get_roi = False
                     start_pick_up = False
-                    set_rgb(detect_color)
+                    #set_rgb(detect_color)
         else:
             if _stop:
                 _stop = False
