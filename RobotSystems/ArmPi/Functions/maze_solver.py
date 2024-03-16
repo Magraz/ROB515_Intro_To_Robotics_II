@@ -11,11 +11,19 @@ from ArmIK.ArmMoveIK import *
 import HiwonderSDK.Board as Board
 from CameraCalibration.CalibrationConfig import *
 
-CELL_SIZE=1
-INIT_POINT = (278,58)
-FINAL_POINT = (348,422)
+start_pt = (0,0)
+path_start_pt = (0,0)
+path_end_pt = (0,0)
+goal_pt = (0,0)
 
 AK = ArmIK()
+
+mouse_x, mouse_y = 0, 0
+
+def get_mouse_xy(event,x,y,flags,param):
+    global mouse_x, mouse_y
+    if event == cv2.EVENT_LBUTTONDBLCLK:
+        mouse_x, mouse_y = x,y
 
 def get_wall_to_hug(img):
 
@@ -34,7 +42,7 @@ def get_wall_to_hug(img):
 
     cv2.drawContours(thresh, contours, 0, (255, 255, 255), 15)
 
-    kernel = np.ones((10, 10), np.uint8)
+    kernel = np.ones((20, 20), np.uint8)
     thresh = cv2.erode(thresh, kernel, iterations=1)
 
     # kernel = np.ones((20, 20), np.uint8)
@@ -63,14 +71,14 @@ def get_wall_to_hug(img):
 
     points_to_follow = []
     i = 0
-    interval = 10
+    interval = 25
 
     for point in coordinates:
         if (i % interval) == 0:
             points_to_follow.append(point)
         i+=1
 
-    return thinned, points_to_follow[::-1]
+    return thinned, points_to_follow
 
 def get_corners(img, unprocessed_img):
 
@@ -84,23 +92,22 @@ def get_corners(img, unprocessed_img):
     dst = cv2.dilate(dst,None)
     
     # Threshold for an optimal value, it may vary depending on the image.
-    unprocessed_img[dst>0.02*dst.max()]=[0,0,255]
+    unprocessed_img[dst>0.1*dst.max()]=[0,0,255]
 
     return unprocessed_img
 
 def plot_points(unprocessed_img, points):
     
     # Threshold for an optimal value, it may vary depending on the image.
-    prev_point = []
-    cv2.circle(unprocessed_img, (INIT_POINT[0], INIT_POINT[1]), 10, (255,0,0), -1)
-    cv2.circle(unprocessed_img, (FINAL_POINT[0], FINAL_POINT[1]), 10, (255,0,0), -1)
-    for point in points:
-        #print(point[0], point[1])
-        #unprocessed_img[point[0], point[1]]=[0,0,255]
+    prev_point = points[0]
 
+    cv2.putText(unprocessed_img, "Start", (start_pt[0], start_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
+    cv2.putText(unprocessed_img, "Goal", (goal_pt[0], goal_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
+
+    for point in points:
         if len(prev_point) != 0:
             cv2.circle(unprocessed_img, (point[1], point[0]), 4, (0,0,255), -1)
-            cv2.line(unprocessed_img, (prev_point[1], prev_point[0]), (point[1], point[0]), (0,255,0), 2)
+            cv2.arrowedLine(unprocessed_img, (prev_point[1], prev_point[0]), (point[1], point[0]), (0,255,0), 2)
         else:
             cv2.circle(unprocessed_img, (point[1], point[0]), 10, (0,0,255), -1)
 
@@ -111,45 +118,66 @@ def plot_points(unprocessed_img, points):
 def order_points(points):
     point_list = []
 
-    #Find point closest to start
+    max_dist = 180
+
+    point_list.append((start_pt[1], start_pt[0]))
+    point_list.append((path_start_pt[1], path_start_pt[0]))
+    
     prev_d = 100000
-    start_point = ()
+    ps_pt = ()
 
     for point in points:
-        d_x = (point[1]-INIT_POINT[0])**2
-        d_y = (point[0]-INIT_POINT[1])**2
+        d_x = (point[1]-path_start_pt[0])**2
+        d_y = (point[0]-path_start_pt[1])**2
         d = (d_x + d_y)**0.5
 
         if d < prev_d:
-            start_point = point
+            ps_pt = point
+            prev_d = d
 
-        prev_d = d
+    point_list.append(ps_pt)
 
     prev_d = 100000
-    point_list.append(start_point)
+    next_point = ()
 
-    next_point = []
     while len(point_list) != len(points):
 
         for point in points:
 
             if not(point in point_list):
+                #print(f'point {point}')
 
                 d_x = (point_list[-1][1]-point[1])**2
                 d_y = (point_list[-1][0]-point[0])**2
                 d = (d_x + d_y)**0.5
 
-                if d < prev_d and d < 70:
+                #print(f'dist vals {d}')
+
+                if d < prev_d and d < max_dist:
+                    # print(f'dist {d}')
+                    # print(f'prev dist {prev_d}')
+                    # print(f'point list {point_list}')
                     next_point = point
+                    prev_d = d
+                
+        if not(next_point in point_list):
+            if len(next_point) > 0:
+                point_list.append(next_point)
+                next_point = ()
+                prev_d = 100000
+            
+        d_x = (path_end_pt[0]-point_list[-1][1])**2
+        d_y = (path_end_pt[1]-point_list[-1][0])**2
+        d_to_goal = (d_x + d_y)**0.5
 
-                prev_d = d
-
-        if len(next_point) > 0:
-            point_list.append(next_point)
+        if d_to_goal < 80:
+            print(f'Point before goal {point_list[-1]}')
+            print(f'Goal {goal_pt}')
+            break
     
-    #Add last point
-    point_list.append([FINAL_POINT[1], FINAL_POINT[0]])
-
+    #Add last points
+    point_list.append((path_end_pt[1], path_end_pt[0]))
+    point_list.append((goal_pt[1], goal_pt[0]))
     return point_list
 
 def move_arm(points):
@@ -157,9 +185,12 @@ def move_arm(points):
 
     for point in points:
         world_x, world_y = convertCoordinate(point[1], point[0], (640, 480))
-        result = AK.setPitchRangeMoving((world_x, world_y, 4), -90, -90, 0)
+        result = AK.setPitchRangeMoving((world_x, world_y, 3), -90, -90, 0)
         time.sleep(1)
         print(world_x, world_x)
+    
+    Board.setBusServoPulse(1, 100, 500)
+    time.sleep(1)
 
 if __name__ == '__main__':
 
@@ -169,22 +200,89 @@ if __name__ == '__main__':
     Board.setBusServoPulse(1, 600, 500)
     time.sleep(2)
 
+    set_points_window = 'set_points'
+
+    cv2.namedWindow(set_points_window)
+    cv2.setMouseCallback(set_points_window,get_mouse_xy)
+
+    start_set = False
+    path_start_set = False
+    path_end_set = False
+    goal_set = False
+
+    # start_set = not start_set
+    # path_start_set = not path_start_set
+    # path_end_set = not path_end_set
+    # goal_set = not goal_set
+
+    # # Maze 1
+    # start_pt = (258, 27)
+    # path_start_pt = (206, 75)
+    # path_end_pt = (507, 302)
+    # goal_pt = (383, 430)
+
     while True:
+
         img = my_camera.frame
+
         if img is not None:
-            frame = img.copy()
-            wall_to_hug, points = get_wall_to_hug(frame)
-            # img_with_corners = get_corners(wall_to_hug, frame)
-            point_list = order_points(points)
-            img_with_points = plot_points(frame, point_list)
-            cv2.imshow('Frame', wall_to_hug)
-            cv2.imshow('Frame2', img_with_points)
-            key = cv2.waitKey(1)
-            if key == 27:
-                # ArmIK.setPitchRangeMoving((-15, 6,  3), -90, -90, 0, 1000)
-                # Board.setBusServoPulse(1, servo1 - 280, 500)
-                break
+
+            if not start_set or not goal_set or not path_start_set or not path_end_set:
+
+                frame = img.copy()
+
+                cv2.imshow(set_points_window,frame)
+
+                k = cv2.waitKey(20) & 0xFF
+
+                if k == 27:
+                    break
+
+                elif k == ord('z'):
+                    start_pt = (mouse_x, mouse_y)
+                    start_set = True
+                    print(f'Start Set {mouse_x, mouse_y}')
+                
+                elif k == ord('x'):
+                    path_start_pt = (mouse_x, mouse_y)
+                    path_start_set = True
+                    print(f'Path Start Set {mouse_x, mouse_y}')
+                
+                elif k == ord('c'):
+                    path_end_pt = (mouse_x, mouse_y)
+                    path_end_set = True
+                    print(f'Path End Set {mouse_x, mouse_y}')
+
+                elif k == ord('v'):
+                    goal_pt = (mouse_x, mouse_y)
+                    goal_set = True
+                    print(f'Goal Set {mouse_x, mouse_y}')
+                
+                if goal_set and start_set and path_start_set and path_end_set:
+                    cv2.destroyWindow(set_points_window)
+
+            else :
+
+                frame = img.copy()
+                wall_to_hug, points = get_wall_to_hug(frame)
+                cv2.imshow('wall_to_hug', wall_to_hug)
+
+                # img_with_corners = get_corners(wall_to_hug, frame)
+                # cv2.imshow('img_with_corners', img_with_corners)
+
+                point_list = order_points(points)
+                img_with_points = plot_points(frame, point_list)
+                cv2.imshow('img_with_points', img_with_points)
+
+                key = cv2.waitKey(1)
+                if key == 27:
+                    break
+
     my_camera.camera_close()
     cv2.destroyAllWindows()
 
-    # move_arm(point_list)
+    time.sleep(3)
+
+    print(point_list)
+
+    move_arm(point_list)
